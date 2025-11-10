@@ -53,7 +53,7 @@ For each hexagon:
 1. Travel times to the nearest PoI in each service category are calculated; the model uses network-based accessibility calculations implemented through the Pandana library to find the nearest POI for each location. 
 2. Only streets accessible by the chosen mode (foot or bike) are considered.  
 3. An average travel time across all categories is computed (sum of POI minutes divided by the number of categories).  
-4. Each hexagon is assigned a discrete proximity value (`allpois`) based on the maximum travel time:
+4. Each hexagon is assigned a discrete proximity value (`overall_max`) based on the maximum travel time:
 
 | Zone | Criteria |
 |------|-----------|
@@ -67,7 +67,7 @@ For each hexagon:
 - **CSV (EPSG:3857)** containing:
   - Travel times for each service category  
   - Average travel time  
-  - Discrete `allpois` index  
+  - Discrete `overall_max` index  
 - **GPKG file** clipped to administrative boundaries of the area for spatial visualization and GIS analysis.
 
 ---
@@ -141,7 +141,7 @@ geovoronoi, fiona=1.9.5, rasterio, gdal, scipy, beautifulsoup, from qgis.core im
 
 **Input Data:** OSM network and PoIs, divided into 8 categories
 
-**Output Data:** CSV and GPKG files with travel times, proximity averages, and categorical accessibility (allpois)
+**Output Data:** CSV and GPKG files with travel times, proximity averages, and categorical accessibility (overall_max)
 
 Execution: Command line or IDE:
 ```ini
