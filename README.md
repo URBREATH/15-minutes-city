@@ -145,7 +145,7 @@ geovoronoi, fiona=1.9.5, rasterio, gdal, scipy, beautifulsoup, from qgis.core im
 
 Execution: Command line or IDE:
 ```ini
-/opt/conda/envs/city15/bin/python3 overallExecutor.py parameters.ini > log.txt 2>&1 &
+.../python3 overallExecutor.py parameters.ini > log.txt 2>&1 &
 ```
 
 It is necessary to specify the correct path of the python instance. This command runs the Python script overallExecutor.py in the background, redirecting both standard output and error messages to the file log.txt.
