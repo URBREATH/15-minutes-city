@@ -1,2 +1,176 @@
 # 15-minutes-city
 Open-source tool for 15-minute city analysis
+
+## Overview and Purpose
+
+The **15-Minute City algorithm** is designed to assign a proximity index to urban services within a defined geographic area. It evaluates how easily residents can access Points of Interest (PoIs) on foot or by bicycle, following the “15-minute city” concept introduced by **Carlos Moreno**.  
+This urban planning model envisions that most daily needs should be met within a 15-minute walk or bike ride from home.
+
+The primary goal of the algorithm is to **quantify accessibility** to essential urban services in a manner that is both globally applicable and locally detailed.  
+To ensure broad usability and replicability, the algorithm relies exclusively on **open-source, freely available data**, primarily sourced from **OpenStreetMap (OSM)**.
+
+---
+
+## Key Features
+
+- Measures accessibility to **8 categories of urban services (POIs):**
+  - Market and groceries (`marketgroc`)
+  - Restaurants and cafés (`restaurantcafe`)
+  - Education (`education`)
+  - Health (`health`)
+  - Banks and post offices (`postbank`)
+  - Parks (`park`)
+  - Entertainment (`entertainment`)
+  - Shops (`shop`)
+- Calculates travel time to services by walking or biking.
+- Supports both **external and OSM-derived gates** for park access.
+
+---
+
+## Algorithm Workflow
+
+### 1. Data Download
+
+1. A dedicated folder is created for the target geographic area.  
+2. If the folder already exists, the process does not overwrite it, preserving previous work.  
+3. Key spatial parameters (area size in lat/lon and representative radius) are computed and stored in a CSV file (unique_bbox.csv).  
+4. The street network is downloaded from OSM, restricted to pedestrian- or bicycle-accessible streets, depending on the selected mode of travel.  
+5. PoIs corresponding to the selected service categories are retrieved.
+
+---
+
+### 2. Hexagonal Grid Generation
+
+- The study area is divided into **hexagonal tiles** with a diameter of 250 m (side = 125 m).  
+- Hexagons provide an optimal balance between **spatial resolution** and **computational efficiency**.
+
+---
+
+### 3. Proximity Index Calculation
+
+For each hexagon:
+
+1. Travel times to the nearest PoI in each service category are calculated; the model uses network-based accessibility calculations implemented through the Pandana library to find the nearest POI for each location. 
+2. Only streets accessible by the chosen mode (foot or bike) are considered.  
+3. An average travel time across all categories is computed (sum of POI minutes divided by the number of categories).  
+4. Each hexagon is assigned a discrete proximity value (`allpois`) based on the maximum travel time:
+
+| Zone | Criteria |
+|------|-----------|
+| 15-minute zone | All main services reachable within 15 minutes |
+| 30-minute zone | At least one service reachable in 15–30 minutes |
+| 60-minute zone | At least one service reachable in 30–60 minutes |
+| No-proximity zone (>60 min or unkwown) | No services reachable within 60 minutes |
+
+**Outputs:**
+
+- **CSV (EPSG:3857)** containing:
+  - Travel times for each service category  
+  - Average travel time  
+  - Discrete `allpois` index  
+- **GPKG file** clipped to administrative boundaries of the area for spatial visualization and GIS analysis.
+
+---
+
+### 4. Park Gate Management (POIs)
+
+The algorithm manages **park access points (gates)** as follows:
+
+- Supports external gates via CSV or automatically downloaded OSM gates.  
+- Flexible processing based on `flag_post_download`:
+
+| Mode | Behavior |
+|------|-----------|
+| **AS_IS** | Save gates as they are |
+| **ONLY_A** | Keep only gates within 10 m of park perimeter |
+| **A_B_C** | Classify gates into:<br>• **A:** entrances ≤ 10 m from park perimeter<br>• **B:** intersections with OSM roads<br>• **C:** virtual points every 100 m along perimeter if no intersecting roads |
+
+**Workflow:**
+
+1. If `flag_or=True`, gates are read from the external CSV.  
+2. If `flag_or=False`, gates and parks are retrieved from OSM.  
+3. Gates are processed according to `flag_post_download`.  
+4. Final gates are saved to: outputPath_bbox/poi/park.csv.
+
+
+---
+
+### 5. QGIS Headless Implementation
+
+The algorithm uses **QGIS in offscreen mode** to perform all geospatial computations.  
+Initialization includes:
+- Importing QGIS and Python libraries  
+- Setting environment variables for headless operation  
+- Initializing the QGIS application and Processing framework
+
+---
+
+### 6. Parameter Handling
+
+The script reads a `.ini` configuration file to dynamically configure inputs.
+
+**Example (`parameter.ini`):**
+
+```ini
+[common]
+bbox = 
+outputPath = 
+weight = time
+category = all
+by = foot
+flag_or = 
+flag_post_download = 
+gate_path =
+clip_layer_path = 
+city_name = 
+```
+
+Parameters include bounding box, output folder, travel mode (always 'time'), category (usually 'all'), by (for us 'foot') and gate management flags.
+
+Read using the read_param function, which preserves key case and converts Python literals.
+
+Allows the script to run fully configured via .ini without modifying the code.
+
+### 7. Technical Implementation
+
+**Programming Language:** Python
+
+**Libraries:**
+Pandana, geopandas, numpy, pandas, osmnet, rtree, pyproj, shapely,
+geovoronoi, fiona=1.9.5, rasterio, gdal, scipy, beautifulsoup, from qgis.core import *
+
+**Input Data:** OSM network and PoIs, divided into 8 categories
+
+**Output Data:** CSV and GPKG files with travel times, proximity averages, and categorical accessibility (allpois)
+
+Execution: Command line or IDE:
+```ini
+/opt/conda/envs/city15/bin/python3 overallExecutor.py parameters.ini > log.txt 2>&1 &
+```
+
+It is necessary to specify the correct path of the python instance. This command runs the Python script overallExecutor.py in the background, redirecting both standard output and error messages to the file log.txt.
+
+
+### 8. Main Scripts
+1.	**overallExecutor.py**
+
+This is the main workflow script for the 15-Minute City Proximity Index. Its main responsibilities are:
+o	Parameter handling: Reads configuration from a .ini.
+o	Perform each step by calling the functions contained in utilityScript.py.
+o	Logging and timing: Prints progress and timing for each step.
+
+2.	**utilityScript.py**
+
+Contains helper functions used by overallExecutor.py:
+o	Bounding box preparation
+o	Data download: Downloads street networks and Points of Interest (PoIs) from OpenStreetMap, filtered by mode of transport (walking or biking) and category. 
+o	Proximity computation: Calls computo to calculate travel times to PoIs for each hexagonal tile and computes the proximity index according to the 15-minute city rules.
+o	Output saving: Uses save_output to merge results and save CSV and GIS files for further analysis.
+
+3.	**gates_green_Areas.py**
+
+Manages park access points (gates) for “green areas”.
+
+4.	**parameters.py**
+
+Provides functions for reading input parameters from .ini file.
