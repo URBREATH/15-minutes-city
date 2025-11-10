@@ -905,7 +905,7 @@ def computo(bbox_tassello, latCella, lonCella, raggio, outputPath_bbox, clip_lay
             ws = []
             np.savetxt("{}/walkability_{}.csv".format(outputPath_bbox, category), ws, delimiter=';', fmt='%s', 
             header = 
-            'geometry;marketgroc;restaurantcafe;education;health;postbank;park;entertainment;shop;average;allpois', 
+            'geometry;marketgroc;restaurantcafe;education;health;postbank;park;entertainment;shop;overall_average;overall_max', 
             comments='')
             print('The walkScore_minuti function does not return a ws to work on.', flush = True)
             return 0
@@ -942,7 +942,7 @@ def computo(bbox_tassello, latCella, lonCella, raggio, outputPath_bbox, clip_lay
             hexag = hexag[['geometry'] + ['minutes_{}'.format(cat) for cat in categories] + ['countNaN']]
             
             #Calcolo indice continuo (da 0 a 100)
-            hexag['average'] = None
+            hexag['overall_average'] = None
             if category != 'all':
                 list_string = [category]
                 #weights_dict = {'restaurantcafe': 3, 'education': 1, 'marketgroc': 3, 'postbank': 1, 'park': 1, 'entertainment': 1, 'shop': 2, 'health': 1}
@@ -969,15 +969,15 @@ def computo(bbox_tassello, latCella, lonCella, raggio, outputPath_bbox, clip_lay
                 pd.set_option('display.max_columns', None)
                 
                 if hexag.at[i, 'countNaN'] == len(categories):  # All values are nan
-                    hexag.at[i, 'average'] = None
+                    hexag.at[i, 'overall_average'] = None
                 else:
                     
                     if num_valori > 0:  
                         
-                        hexag.at[i, 'average'] = sum(filter(None, valori)) / num_valori  # Calculate the average
+                        hexag.at[i, 'overall_average'] = sum(filter(None, valori)) / num_valori  # Calculate the overall_average
                     else:
           
-                        hexag.at[i, 'average'] = None  
+                        hexag.at[i, 'overall_average'] = None  
             
             pd.set_option('display.max_columns', None)
             pd.set_option("display.max_rows", None)        
@@ -986,7 +986,7 @@ def computo(bbox_tassello, latCella, lonCella, raggio, outputPath_bbox, clip_lay
             hexag[minutes_cols] = hexag[minutes_cols].fillna('> 60')
 
             # Discrete index
-            hexag['allpois'] = '> 60'
+            hexag['overall_max'] = '> 60'
             for i in hexag.index:
                 if hexag.at[i,'countNaN'] == 0:
                     if category == 'all':
@@ -997,25 +997,25 @@ def computo(bbox_tassello, latCella, lonCella, raggio, outputPath_bbox, clip_lay
                         mins = [hexag.at[i,f'minutes_{category}']]
                     
                     if all(val <= 15 for val in mins):
-                        hexag.at[i,'allpois'] = 15
+                        hexag.at[i,'overall_max'] = 15
                     elif any(val > 15 for val in mins) and all(val <=30 for val in mins): 
-                        hexag.at[i,'allpois'] = 30
+                        hexag.at[i,'overall_max'] = 30
                     else:
-                        hexag.at[i,'allpois'] = 60
+                        hexag.at[i,'overall_max'] = 60
                 elif hexag.at[i,'countNaN'] < len(categories):
-                    hexag.at[i,'allpois'] = '> 60'
+                    hexag.at[i,'overall_max'] = '> 60'
                     
             hexag = hexag.replace({None : np.nan})
             hexag = hexag.to_crs(CRS_3857) 
-            if 'average' in hexag.columns:
-                hexag['average'] = hexag['average'].round(2)
+            if 'overall_average' in hexag.columns:
+                hexag['overall_average'] = hexag['overall_average'].round(2)
             
-            #geometry;marketgroc;restaurantcafe;education;health;postbank;park;entertainment;shop;countNaN;average;city
+            #geometry;marketgroc;restaurantcafe;education;health;postbank;park;entertainment;shop;countNaN;overall_average;city
 
 
             np.savetxt("{}/walkability_{}.csv".format(outputPath_bbox, category), hexag, delimiter=';', fmt='%s', 
             header = 
-            'geometry;marketgroc;restaurantcafe;education;health;postbank;park;entertainment;shop;average;allpois', 
+            'geometry;marketgroc;restaurantcafe;education;health;postbank;park;entertainment;shop;overall_average;overall_max', 
             comments='')
             clip_layer = geopandas.read_file(clip_layer_path)
             
@@ -1038,8 +1038,8 @@ def computo(bbox_tassello, latCella, lonCella, raggio, outputPath_bbox, clip_lay
                 'park',
                 'entertainment',
                 'shop',
-                'average',
-                'allpois'
+                'overall_average',
+                'overall_max'
             ]
             
             hexag_clipped = hexag_clipped[[c for c in cols_to_keep if c in hexag_clipped.columns]]
@@ -1070,7 +1070,7 @@ def save_output(outputPath, category='all', by='foot'):
         walkability = pd.read_csv(input_file, sep=';', header=0, index_col=False)
 
         np.savetxt(f"{outputPath}/walkability_{by}.csv", walkability, delimiter=';', fmt='%s',
-                   header='geometry;marketgroc;restaurantcafe;education;health;postbank;park;entertainment;shop;average;allpois',
+                   header='geometry;marketgroc;restaurantcafe;education;health;postbank;park;entertainment;shop;overall_average;overall_max',
                    comments='')
 
         return 0
