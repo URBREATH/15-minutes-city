@@ -69,14 +69,9 @@ For each hexagon:
 All service categories are represented as point features in OSM, except for parks. For parks, park gates are used as points.
 Each park is assigned access points classified into three types:
 
-- **Type A** – Existing gates Points located within 10 m of the park boundary, identified using the following OSM tags:
+- **Type A**: Existing gates Points located within 10 m of the park boundary, identified using the following OSM tags:
 
-o barrier = gate
-o barrier = gate
-o barrier = entrance
-o entrance = yes
-o leisure = park
-o leisure = dog_park
+o barrier = gate or barrier = entrance or entrance = yes
 
 - **Type B** – Street–park intersections If no Type A gates are found, the tool identifies intersections between the park perimeter and the street network, using any OSM street tagged as:
 
