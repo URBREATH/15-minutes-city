@@ -52,7 +52,7 @@ For each hexagon:
 1. Travel times to the nearest PoI in each service category are calculated; the model uses network-based accessibility calculations implemented through the **Pandana library** to find the nearest POI for each location. 
 2. Only streets accessible by the chosen mode (foot or bike) are considered.
 3. The walking time used is **5 km/h**.
-4. An average travel time ((`overall_average`)  across all categories is computed (sum of POI minutes divided by the number of categories).  
+4. An average travel time (`overall_average`)  across all categories is computed (sum of POI minutes divided by the number of categories).  
 5. Each hexagon is assigned a value (`overall_max`) based on the maximum travel time
 
 **Outputs:**
@@ -60,7 +60,7 @@ For each hexagon:
 - **CSV (EPSG:3857)** containing:
   - Travel times for each service category  
   - Average travel time  
-  - Discrete `overall_max` index  
+  - `overall_max` index  
 - **GPKG file** clipped to administrative boundaries of the area for spatial visualization and GIS analysis.
 
 ---
