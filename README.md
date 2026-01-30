@@ -71,11 +71,11 @@ Each park is assigned access points classified into three types:
 
 - **Type A**: Existing gates Points located within 10 m of the park boundary, identified using the following OSM tags:
 
-o barrier = gate or barrier = entrance or entrance = yes
+    barrier = gate or barrier = entrance or entrance = yes
 
 - **Type B** – Street–park intersections If no Type A gates are found, the tool identifies intersections between the park perimeter and the street network, using any OSM street tagged as:
 
-o 'highway'='primary' or 'highway'='primary_link' or 'highway'='secondary' or 'highway'='secondary_link' or 'highway'='tertiary' or 'highway'='tertiary_link' or 'highway'='unclassified' or 'highway'='residential' or 'bicycle_road'='yes' or 'bicycle'='designated' or 'highway'='living_street' or 'highway'='pedestrian' or 'highway'='service' or 'service'='parking_aisle' or 'highway'='escape' or 'highway'='road' or 'highway'='track' or 'highway'='path' or 'highway'='bus_guideway' or 'highway'='footway' or 'highway'='cycleway' or 'highway'='passing_place' or 'cycleway'='lane' or 'cycleway'='track' or 'highway'='steps'
+    'highway'='primary' or 'highway'='primary_link' or 'highway'='secondary' or 'highway'='secondary_link' or 'highway'='tertiary' or 'highway'='tertiary_link' or 'highway'='unclassified' or 'highway'='residential' or 'bicycle_road'='yes' or 'bicycle'='designated' or 'highway'='living_street' or 'highway'='pedestrian' or 'highway'='service' or 'service'='parking_aisle' or 'highway'='escape' or 'highway'='road' or 'highway'='track' or 'highway'='path' or 'highway'='bus_guideway' or 'highway'='footway' or 'highway'='cycleway' or 'highway'='passing_place' or 'cycleway'='lane' or 'cycleway'='track' or 'highway'='steps'
 
 - **Type C** – Virtual access points If no Type A or B points are available, the tool generates virtual gates every 100 m along the park perimeter.
 
@@ -135,12 +135,19 @@ city_name =
 Parameters include bounding box, output folder, travel mode (always 'time'), category (usually 'all'), by (for us 'foot') and gate management flags.
 
 **bbox**: bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max])
+
 **category**: service category for which the index is calculated (one of 8 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop'] or 'all' for a combined score)
+
 **by**: mode of transportation considered (pedestrian or cycling, default = 'foot’ or 'bike')
+
 **weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
+
 **clip_layer_path**: boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..)
+
 **outputPath**: output folder → folder where output files and results will be stored
+
 **gate_path**:  gate folder → folder where gates are places in case of external gates
+
 **city_name**: name of the city for which the index is calculates
 
 Read using the read_param function, which preserves key case and converts Python literals.
