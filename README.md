@@ -12,7 +12,7 @@ To ensure broad usability and replicability, the algorithm relies exclusively on
 ---
 
 ## Key Features
-
+- The tool uses either **OpenStreetMap (OSM)** or **local data** as its data source.
 - Measures accessibility to **8 categories of urban services (POIs):**
   - Market and groceries (`marketgroc`)
   - Restaurants and cafés (`restaurantcafe`)
@@ -24,7 +24,6 @@ To ensure broad usability and replicability, the algorithm relies exclusively on
   - Shops (`shop`)
 - Calculates travel time to services by walking or biking.
 - Supports both **external and OSM-derived gates** for park access.
-
 ---
 
 ## Algorithm Workflow
@@ -41,7 +40,7 @@ To ensure broad usability and replicability, the algorithm relies exclusively on
 
 ### 2. Hexagonal Grid Generation
 
-- The study area is divided into **hexagonal tiles** with a diameter of 250 m (side = 125 m).  
+- The study area is divided into **hexagonal tiles** with a diameter of 250 m (side = 125 m), generated only where OSM street nodes exist.  
 - Hexagons provide an optimal balance between **spatial resolution** and **computational efficiency**.
 
 ---
@@ -50,17 +49,11 @@ To ensure broad usability and replicability, the algorithm relies exclusively on
 
 For each hexagon:
 
-1. Travel times to the nearest PoI in each service category are calculated; the model uses network-based accessibility calculations implemented through the Pandana library to find the nearest POI for each location. 
-2. Only streets accessible by the chosen mode (foot or bike) are considered.  
-3. An average travel time across all categories is computed (sum of POI minutes divided by the number of categories).  
-4. Each hexagon is assigned a discrete proximity value (`overall_max`) based on the maximum travel time:
-
-| Zone | Criteria |
-|------|-----------|
-| 15-minute zone | All main services reachable within 15 minutes |
-| 30-minute zone | At least one service reachable in 15–30 minutes |
-| 60-minute zone | At least one service reachable in 30–60 minutes |
-| No-proximity zone (>60 min or unkwown) | No services reachable within 60 minutes |
+1. Travel times to the nearest PoI in each service category are calculated; the model uses network-based accessibility calculations implemented through the **Pandana library** to find the nearest POI for each location. 
+2. Only streets accessible by the chosen mode (foot or bike) are considered.
+3. The walking time used is **5 km/h**.
+4. An average travel time ((`overall_average`)  across all categories is computed (sum of POI minutes divided by the number of categories).  
+5. Each hexagon is assigned a value (`overall_max`) based on the maximum travel time
 
 **Outputs:**
 
@@ -71,6 +64,25 @@ For each hexagon:
 - **GPKG file** clipped to administrative boundaries of the area for spatial visualization and GIS analysis.
 
 ---
+### 4. Park Access Point Classification
+
+All service categories are represented as point features in OSM, except for parks. For parks, park gates are used as points.
+Each park is assigned access points classified into three types:
+
+- **Type A** – Existing gates Points located within 10 m of the park boundary, identified using the following OSM tags:
+
+o barrier = gate
+o barrier = gate
+o barrier = entrance
+o entrance = yes
+o leisure = park
+o leisure = dog_park
+
+- **Type B** – Street–park intersections If no Type A gates are found, the tool identifies intersections between the park perimeter and the street network, using any OSM street tagged as:
+
+o 'highway'='primary' or 'highway'='primary_link' or 'highway'='secondary' or 'highway'='secondary_link' or 'highway'='tertiary' or 'highway'='tertiary_link' or 'highway'='unclassified' or 'highway'='residential' or 'bicycle_road'='yes' or 'bicycle'='designated' or 'highway'='living_street' or 'highway'='pedestrian' or 'highway'='service' or 'service'='parking_aisle' or 'highway'='escape' or 'highway'='road' or 'highway'='track' or 'highway'='path' or 'highway'='bus_guideway' or 'highway'='footway' or 'highway'='cycleway' or 'highway'='passing_place' or 'cycleway'='lane' or 'cycleway'='track' or 'highway'='steps'
+
+- **Type C** – Virtual access points If no Type A or B points are available, the tool generates virtual gates every 100 m along the park perimeter.
 
 ### 4. Park Gate Management (POIs)
 
@@ -83,7 +95,7 @@ The algorithm manages **park access points (gates)** as follows:
 |------|-----------|
 | **AS_IS** | Save gates as they are |
 | **ONLY_A** | Keep only gates within 10 m of park perimeter |
-| **A_B_C** | Classify gates into:<br>• **A:** entrances ≤ 10 m from park perimeter<br>• **B:** intersections with OSM roads<br>• **C:** virtual points every 100 m along perimeter if no intersecting roads |
+| **A_B_C** | Classify gates into: A,B,C |
 
 **Workflow:**
 
@@ -126,6 +138,15 @@ city_name =
 ```
 
 Parameters include bounding box, output folder, travel mode (always 'time'), category (usually 'all'), by (for us 'foot') and gate management flags.
+
+**bbox**: bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max])
+**category**: service category for which the index is calculated (one of 8 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop'] or 'all' for a combined score)
+**by**: mode of transportation considered (pedestrian or cycling, default = 'foot’ or 'bike')
+**weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
+**clip_layer_path**: boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..)
+**outputPath**: output folder → folder where output files and results will be stored
+**gate_path**:  gate folder → folder where gates are places in case of external gates
+**city_name**: name of the city for which the index is calculates
 
 Read using the read_param function, which preserves key case and converts Python literals.
 
