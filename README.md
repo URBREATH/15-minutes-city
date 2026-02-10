@@ -28,9 +28,77 @@ To ensure broad usability and replicability, the algorithm relies exclusively on
 
 ## Algorithm Workflow
 
+### Required Inputs
+
+- parameter.ini → configuration file for the target city
+
+- Optional boundary polygon → used to clip the final results
+
+### Output Folder Structure
+
+Output directory is created at outputPath. Inside it:
+
+- unique_bbox.csv → stores key spatial parameters (bounding box extent and representative radius)
+
+- Walkability results:
+
+  - walkability_all.csv → if category = all
+
+  - walkability_<category>.csv → if a specific category is selected (e.g., walkability_education.csv)
+
+  - walkability_<category>_<city_name>.gpkg → spatial results, clipped to the optional boundary
+
+- Points of Interest (PoIs)
+
+  - Folder: pois/ → Contains one CSV for each category: ['marketgroc', 'restaurantcafe', 'education', 'health', 'postbank', 'park', 'entertainment', 'shop']
+
+- Street Network
+
+  - Folder: network/ → Contains: nodes.csv and edges.csv
+
+```
+parent_path/
+├── parameters.ini          # Run configuration file
+├── boundary.gpkg           # Optional GeoPackage for clipping
+├── overallExecutor.py      # Main Python script
+├── utilityScript.py
+├── parameters.py
+└── gates_green_areas.py
+
+```
+After executing the script, the following structure will be created:  
+```
+parent_path/
+├── parameters.ini          # Run configuration file
+├── boundary.gpkg           # Optional GeoPackage for clipping
+├── overallExecutor.py      # Main Python script
+├── utilityScript.py
+├── parameters.py
+└── gates_green_areas.py
+
+Output directory (output_path = parent_path/{...}):
+
+output_path/
+├── walkability_<category>.csv              # Walkability results per category
+├── walkability_<category>_<city>.gpkg     # Spatial walkability results, clipped to boundary if provided
+├── pois/                                  # Points of Interest by category
+│   ├── marketgroc/
+│   ├── restaurantcafe/
+│   ├── education/
+│   ├── health/
+│   ├── postbank/
+│   ├── park/
+│   ├── entertainment/
+│   ├── shop/
+└── network/                               # Street network
+    ├── edges.csv
+    └── nodes.csv
+
+```
+
 ### 1. Data Download
 
-1. A dedicated folder is created for the target geographic area.  
+1. A dedicated folder is created for the target geographic area at the indicated outputPath.  
 2. If the folder already exists, the process does not overwrite it, preserving previous work.  
 3. Key spatial parameters (area size in lat/lon and representative radius) are computed and stored in a CSV file (unique_bbox.csv).  
 4. The street network is downloaded from OSM, restricted to pedestrian- or bicycle-accessible streets, depending on the selected mode of travel.  
@@ -41,8 +109,6 @@ To ensure broad usability and replicability, the algorithm relies exclusively on
 ### 2. Hexagonal Grid Generation
 
 - The study area is divided into **hexagonal tiles** with a diameter of 250 m (side = 125 m), generated only where OSM street nodes exist.  
-- Hexagons provide an optimal balance between **spatial resolution** and **computational efficiency**.
-
 ---
 
 ### 3. Proximity Index Calculation
@@ -64,6 +130,26 @@ For each hexagon:
 - **GPKG file** clipped to administrative boundaries of the area for spatial visualization and GIS analysis.
 
 ---
+### 4. Park Gate Management (POIs)
+
+The algorithm manages **park access points (gates)** as follows:
+
+- Supports external gates via CSV or automatically downloaded OSM gates.  
+- Flexible processing based on `flag_post_download`:
+
+| Mode | Behavior |
+|------|-----------|
+| **AS_IS** | Save gates as they are |
+| **ONLY_A** | Keep only gates within 10 m of park perimeter (type A) |
+| **A_B_C** | Classify gates into: type A or B or C |
+
+**Workflow:**
+
+1. If `flag_or=True`, gates are read from the external CSV.  
+2. If `flag_or=False`, gates and parks are retrieved from OSM.  
+3. Gates are processed according to `flag_post_download`.  
+4. Final gates are saved to: outputPath_bbox/poi/park.csv.
+   
 ### 4. Park Access Point Classification
 
 All service categories are represented as point features in OSM, except for parks. For parks, park gates are used as points.
@@ -78,27 +164,6 @@ Each park is assigned access points classified into three types:
     'highway'='primary' or 'highway'='primary_link' or 'highway'='secondary' or 'highway'='secondary_link' or 'highway'='tertiary' or 'highway'='tertiary_link' or 'highway'='unclassified' or 'highway'='residential' or 'bicycle_road'='yes' or 'bicycle'='designated' or 'highway'='living_street' or 'highway'='pedestrian' or 'highway'='service' or 'service'='parking_aisle' or 'highway'='escape' or 'highway'='road' or 'highway'='track' or 'highway'='path' or 'highway'='bus_guideway' or 'highway'='footway' or 'highway'='cycleway' or 'highway'='passing_place' or 'cycleway'='lane' or 'cycleway'='track' or 'highway'='steps'
 
 - **Type C** – Virtual access points If no Type A or B points are available, the tool generates virtual gates every 100 m along the park perimeter.
-
-### 4. Park Gate Management (POIs)
-
-The algorithm manages **park access points (gates)** as follows:
-
-- Supports external gates via CSV or automatically downloaded OSM gates.  
-- Flexible processing based on `flag_post_download`:
-
-| Mode | Behavior |
-|------|-----------|
-| **AS_IS** | Save gates as they are |
-| **ONLY_A** | Keep only gates within 10 m of park perimeter |
-| **A_B_C** | Classify gates into: A,B,C |
-
-**Workflow:**
-
-1. If `flag_or=True`, gates are read from the external CSV.  
-2. If `flag_or=False`, gates and parks are retrieved from OSM.  
-3. Gates are processed according to `flag_post_download`.  
-4. Final gates are saved to: outputPath_bbox/poi/park.csv.
-
 
 ---
 
@@ -115,6 +180,7 @@ Initialization includes:
 ### 6. Parameter Handling
 
 The script reads a `.ini` configuration file to dynamically configure inputs.
+A separate parameter.ini file is created for each city, containing all city-specific parameters.At runtime, the appropriate configuration file must be provided depending on the city being processed. For example, to run the analysis for Parma, the parameter_parma.ini file is used.
 
 **Example (`parameter.ini`):**
 
@@ -134,7 +200,7 @@ city_name =
 
 Parameters include bounding box, output folder, travel mode (always 'time'), category (usually 'all'), by (for us 'foot') and gate management flags.
 
-**bbox**: bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max])
+**bbox**: rectangular bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max])
 
 **category**: service category for which the index is calculated (one of 8 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop'] or 'all' for a combined score)
 
@@ -142,7 +208,7 @@ Parameters include bounding box, output folder, travel mode (always 'time'), cat
 
 **weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
 
-**clip_layer_path**: boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..)
+**clip_layer_path**: path of the boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..)
 
 **outputPath**: output folder → folder where output files and results will be stored
 
@@ -158,13 +224,15 @@ Allows the script to run fully configured via .ini without modifying the code.
 
 **Programming Language:** Python
 
+**Qgis:** install qgis
+
 **Libraries:**
 Pandana, geopandas, numpy, pandas, osmnet, rtree, pyproj, shapely,
 geovoronoi, fiona=1.9.5, rasterio, gdal, scipy, beautifulsoup, from qgis.core import *
 
 **Input Data:** OSM network and PoIs, divided into 8 categories
 
-**Output Data:** CSV and GPKG files with travel times, proximity averages, and categorical accessibility (overall_max)
+**Output Data:** CSV and GPKG files with travel times, overall_average, overall_max
 
 Execution: Command line or IDE:
 ```ini
