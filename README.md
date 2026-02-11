@@ -220,7 +220,7 @@ Parameters include bounding box, output folder, travel mode (always 'time'), cat
 
 **weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
 
-**clip_layer_path**: path of the boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) (EPSG:3857)
+**clip_layer_path**: path of the boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) (EPSG:3857 preferable)
 
 **outputPath**: output folder → folder where output files and results will be stored
 
