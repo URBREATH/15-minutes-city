@@ -189,7 +189,7 @@ Initialization includes:
 ### 3. Parameters and Execution
 
 The script reads a `.ini` configuration file to dynamically configure inputs.
-A separate parameter.ini file is created for each city, containing all city-specific parameters.At runtime, the appropriate configuration file must be provided depending on the city being processed. For example, to run the analysis for Parma, the parameter_parma.ini file is used.
+A separate parameter.ini file is created for each city, containing all city-specific parameters. At runtime, the appropriate configuration file must be provided depending on the city being processed. For example, to run the analysis for Parma, the parameter_parma.ini file is used.
 
 **Example (`parameter.ini`):**
 
@@ -225,9 +225,7 @@ Parameters include bounding box, output folder, travel mode (always 'time'), cat
 
 **city_name**: name of the city for which the index is calculates
 
-Read using the read_param function, which preserves key case and converts Python literals.
-
-Allows the script to run fully configured via .ini without modifying the code.
+Minimum required parameters: bbox and outputPath.
 
 ---
 
