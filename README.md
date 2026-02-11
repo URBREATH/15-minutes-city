@@ -1,5 +1,5 @@
 # 15-minutes-city
-Open-source tool for 15-minute city analysis
+Open-source tool for 15-minute city analysis.
 
 ## Overview and Purpose
 
@@ -66,11 +66,11 @@ Each park is assigned access points classified into three types:
 
 - **Type A**: Gates (from OSM or from an external CSV, depending on configuration) located within 10 m of the park boundary. When downloaded from OSM, gates are identified using the following tags:
 
-    barrier = gate or barrier = entrance or entrance = yes
+```barrier = gate or barrier = entrance or entrance = yes```
 
 - **Type B** – Gates generated as intersections between the park perimeter and the street network, considering any OSM street tagged as:
 
-    'highway'='primary' or 'highway'='primary_link' or 'highway'='secondary' or 'highway'='secondary_link' or 'highway'='tertiary' or 'highway'='tertiary_link' or 'highway'='unclassified' or 'highway'='residential' or 'bicycle_road'='yes' or 'bicycle'='designated' or 'highway'='living_street' or 'highway'='pedestrian' or 'highway'='service' or 'service'='parking_aisle' or 'highway'='escape' or 'highway'='road' or 'highway'='track' or 'highway'='path' or 'highway'='bus_guideway' or 'highway'='footway' or 'highway'='cycleway' or 'highway'='passing_place' or 'cycleway'='lane' or 'cycleway'='track' or 'highway'='steps'
+```'highway'='primary' or 'highway'='primary_link' or 'highway'='secondary' or 'highway'='secondary_link' or 'highway'='tertiary' or 'highway'='tertiary_link' or 'highway'='unclassified' or 'highway'='residential' or 'bicycle_road'='yes' or 'bicycle'='designated' or 'highway'='living_street' or 'highway'='pedestrian' or 'highway'='service' or 'service'='parking_aisle' or 'highway'='escape' or 'highway'='road' or 'highway'='track' or 'highway'='path' or 'highway'='bus_guideway' or 'highway'='footway' or                   'highway'='cycleway' or 'highway'='passing_place' or 'cycleway'='lane' or 'cycleway'='track' or 'highway'='steps'```
 
 - **Type C** – Virtual access points: the tool generates virtual gates every 100 m along the park perimeter.
 
@@ -99,6 +99,7 @@ The algorithm manages **park access points (gates)** as follows:
 The output consists of a vector hexagon layer, provided in two formats (EPSG:3857):
 - **CSV**
 - **GPKG file**, clipped if a clipping polygon is provided
+
 Both formats contain travel times for each service category, the average travel time, and the overall_max index.
 ---
 
@@ -108,13 +109,11 @@ Output directory is created at outputPath. Inside it:
 
 - **unique_bbox.csv** → stores key spatial parameters (bounding box extent and representative radius)
 
-- Walkability results:
+- **walkability_all.csv** → if category = all **or**
 
-  - **walkability_all.csv** → if category = all **or**
+- **walkability_<category>.csv** → if a specific category is selected (e.g., walkability_education.csv)
 
-  - **walkability_<category>.csv** → if a specific category is selected (e.g., walkability_education.csv)
-
-  - **walkability_<category>_<city_name>.gpkg** → spatial results, clipped to the optional boundary
+- **walkability_<category>_<city_name>.gpkg** → spatial results, clipped to the optional boundary
 
 - Points of Interest (PoIs)
 
@@ -225,7 +224,7 @@ Parameters include bounding box, output folder, travel mode (always 'time'), cat
 
 **city_name**: name of the city for which the index is calculates
 
-Minimum required parameters: bbox and outputPath.
+**Minimum required parameters: bbox and outputPath.**
 
 ---
 
@@ -246,16 +245,23 @@ It is necessary to specify the correct path of the python instance. This command
 1.	**overallExecutor.py**
 
 This is the main workflow script for the 15-Minute City Proximity Index. Its main responsibilities are:
+
 o	Parameter handling: Reads configuration from a .ini.
+
 o	Perform each step by calling the functions contained in utilityScript.py.
+
 o	Logging and timing: Prints progress and timing for each step.
 
 2.	**utilityScript.py**
 
 Contains helper functions used by overallExecutor.py:
+
 o	Bounding box preparation
+
 o	Data download: Downloads street networks and Points of Interest (PoIs) from OpenStreetMap, filtered by mode of transport (walking or biking) and category. 
+
 o	Proximity computation: Calls computo to calculate travel times to PoIs for each hexagonal tile and computes the proximity index according to the 15-minute city rules.
+
 o	Output saving: Uses save_output to merge results and save CSV and GIS files for further analysis.
 
 3.	**gates_green_areas.py**
