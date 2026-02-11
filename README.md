@@ -214,6 +214,10 @@ Parameters include bounding box, output folder, travel mode (always 'time'), cat
 
 **by**: mode of transportation considered (pedestrian or cycling, default = 'foot’ or 'bike')
 
+**flag_or**: true or false
+
+**flag_post_download**: possiblity 'asis', 'a', 'abc'
+
 **weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
 
 **clip_layer_path**: path of the boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..)
