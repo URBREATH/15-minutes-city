@@ -6,9 +6,6 @@ Open-source tool for 15-minute city analysis
 The **15-Minute City algorithm** is designed to assign a proximity index to urban services within a defined geographic area. It evaluates how easily residents can access Points of Interest (PoIs) on foot or by bicycle, following the “15-minute city” concept introduced by **Carlos Moreno**.  
 This urban planning model envisions that most daily needs should be met within a 15-minute walk or bike ride from home.
 
-The primary goal of the algorithm is to **quantify accessibility** to essential urban services in a manner that is both globally applicable and locally detailed.  
-To ensure broad usability and replicability, the algorithm relies exclusively on **open-source, freely available data**, primarily sourced from **OpenStreetMap (OSM)**.
-
 ---
 
 ## Key Features
@@ -26,35 +23,106 @@ To ensure broad usability and replicability, the algorithm relies exclusively on
 - Supports both **external and OSM-derived gates** for park access.
 ---
 
-## Algorithm Workflow
-
-### Required Inputs
+## Required Inputs
 
 - parameter.ini → configuration file for the target city
 
 - Optional boundary polygon → used to clip the final results
+---
+  
+## Algorithm Workflow
 
-### Output Folder Structure
+### 1. Data Download
+
+1. A dedicated folder is created for the target geographic area at the indicated outputPath.  
+2. If the folder already exists, the process does not overwrite it, preserving previous work.  
+3. Key spatial parameters (area size in lat/lon and representative radius) are computed and stored in a CSV file (unique_bbox.csv).  
+4. The street network is downloaded from OSM, restricted to pedestrian- or bicycle-accessible streets, depending on the selected mode of travel.  
+5. PoIs corresponding to the selected service categories are retrieved.
+
+---
+
+### 2. Hexagonal Grid Generation
+
+- The study area is divided into **hexagonal tiles** with a diameter of 250 m (side = 125 m), generated only where OSM street nodes exist.  
+---
+
+### 3. Proximity Index Calculation
+
+For each hexagon:
+
+1. Travel times to the nearest PoI in each service category are calculated; the model uses network-based accessibility calculations implemented through the **Pandana library** to find the nearest POI for each location. 
+2. Only streets accessible by the chosen mode (foot or bike) are considered.
+3. The walking time used is **5 km/h**.
+4. An average travel time (`overall_average`)  across all categories is computed (sum of POI minutes divided by the number of categories).  
+5. Each hexagon is assigned a value (`overall_max`) based on the maximum travel time
+
+---
+
+### 4. Park Gate Management (POIs) and classification
+
+All service categories are represented as point features in OSM, except for parks. For parks, park gates are used as points.
+Each park is assigned access points classified into three types:
+
+- **Type A**: Gates (from OSM or from an external CSV, depending on configuration) located within 10 m of the park boundary. When downloaded from OSM, gates are identified using the following tags:
+
+    barrier = gate or barrier = entrance or entrance = yes
+
+- **Type B** – Gates generated as intersections between the park perimeter and the street network, considering any OSM street tagged as:
+
+    'highway'='primary' or 'highway'='primary_link' or 'highway'='secondary' or 'highway'='secondary_link' or 'highway'='tertiary' or 'highway'='tertiary_link' or 'highway'='unclassified' or 'highway'='residential' or 'bicycle_road'='yes' or 'bicycle'='designated' or 'highway'='living_street' or 'highway'='pedestrian' or 'highway'='service' or 'service'='parking_aisle' or 'highway'='escape' or 'highway'='road' or 'highway'='track' or 'highway'='path' or 'highway'='bus_guideway' or 'highway'='footway' or 'highway'='cycleway' or 'highway'='passing_place' or 'cycleway'='lane' or 'cycleway'='track' or 'highway'='steps'
+
+- **Type C** – Virtual access points: the tool generates virtual gates every 100 m along the park perimeter.
+
+Types A, B, and C are mutually exclusive. Type B gates are generated only if no Type A gates are available for a park, and Type C gates are generated only if neither Type A nor Type B gates are found.
+
+The algorithm manages **park access points (gates)** as follows:
+
+- Supports external gates via CSV or automatically downloaded OSM gates.  
+- Flexible processing based on `flag_post_download`:
+
+| Mode | Behavior |
+|------|-----------|
+| **AS_IS** | Save gates as they are |
+| **ONLY_A** | Keep only gates within 10 m of park perimeter (type A) |
+| **A_B_C** | Classify gates into: type A or B or C |
+
+**Workflow:**
+
+1. If `flag_or=True`, gates are read from the external CSV. The file must include a minimum structure consisting of 'id', 'lat', and 'lon' columns, with geographic coordinates expressed in EPSG:4326.
+2. If `flag_or=False`, gates and parks are retrieved from OSM.  
+3. Gates are processed according to `flag_post_download`.  
+4. Final gates are saved to: outputPath/poi/park.csv.
+
+---
+## **Outputs:**
+The output consists of a vector hexagon layer, provided in two formats (EPSG:3857):
+- **CSV**
+- **GPKG file**, clipped if a clipping polygon is provided
+Both formats contain travel times for each service category, the average travel time, and the overall_max index.
+---
+
+## Otput Folder Structure
 
 Output directory is created at outputPath. Inside it:
 
-- unique_bbox.csv → stores key spatial parameters (bounding box extent and representative radius)
+- **unique_bbox.csv** → stores key spatial parameters (bounding box extent and representative radius)
 
 - Walkability results:
 
-  - walkability_all.csv → if category = all
+  - **walkability_all.csv** → if category = all **or**
 
-  - walkability_<category>.csv → if a specific category is selected (e.g., walkability_education.csv)
+  - **walkability_<category>.csv** → if a specific category is selected (e.g., walkability_education.csv)
 
-  - walkability_<category>_<city_name>.gpkg → spatial results, clipped to the optional boundary
+  - **walkability_<category>_<city_name>.gpkg** → spatial results, clipped to the optional boundary
 
 - Points of Interest (PoIs)
 
-  - Folder: pois/ → Contains one CSV for each category: ['marketgroc', 'restaurantcafe', 'education', 'health', 'postbank', 'park', 'entertainment', 'shop']
+  - Folder: **pois/** → contains one CSV for each category: ['marketgroc', 'restaurantcafe', 'education', 'health', 'postbank', 'park', 'entertainment', 'shop']
 
 - Street Network
 
-  - Folder: network/ → Contains: nodes.csv and edges.csv
+  - Folder: **network/** → contains: nodes.csv and edges.csv
 
 ```
 parent_path/
@@ -82,92 +150,34 @@ output_path/
 ├── walkability_<category>.csv              # Walkability results per category
 ├── walkability_<category>_<city>.gpkg     # Spatial walkability results, clipped to boundary if provided
 ├── pois/                                  # Points of Interest by category
-│   ├── marketgroc/
-│   ├── restaurantcafe/
-│   ├── education/
-│   ├── health/
-│   ├── postbank/
-│   ├── park/
-│   ├── entertainment/
-│   ├── shop/
+│   ├── marketgroc.csv
+│   ├── restaurantcafe.csv
+│   ├── education.csv
+│   ├── health.csv
+│   ├── postbank.csv
+│   ├── park.csv
+│   ├── entertainment.csv
+│   ├── shop.csv
 └── network/                               # Street network
     ├── edges.csv
     └── nodes.csv
 
 ```
-
-### 1. Data Download
-
-1. A dedicated folder is created for the target geographic area at the indicated outputPath.  
-2. If the folder already exists, the process does not overwrite it, preserving previous work.  
-3. Key spatial parameters (area size in lat/lon and representative radius) are computed and stored in a CSV file (unique_bbox.csv).  
-4. The street network is downloaded from OSM, restricted to pedestrian- or bicycle-accessible streets, depending on the selected mode of travel.  
-5. PoIs corresponding to the selected service categories are retrieved.
-
 ---
 
-### 2. Hexagonal Grid Generation
+##  Technical Architecture
 
-- The study area is divided into **hexagonal tiles** with a diameter of 250 m (side = 125 m), generated only where OSM street nodes exist.  
----
+### 1. Programming language and libraries
 
-### 3. Proximity Index Calculation
+**Programming Language:** Python
 
-For each hexagon:
+**Qgis:** install qgis
 
-1. Travel times to the nearest PoI in each service category are calculated; the model uses network-based accessibility calculations implemented through the **Pandana library** to find the nearest POI for each location. 
-2. Only streets accessible by the chosen mode (foot or bike) are considered.
-3. The walking time used is **5 km/h**.
-4. An average travel time (`overall_average`)  across all categories is computed (sum of POI minutes divided by the number of categories).  
-5. Each hexagon is assigned a value (`overall_max`) based on the maximum travel time
+**Libraries:**
+Pandana, geopandas, numpy, pandas, osmnet, rtree, pyproj, shapely,
+geovoronoi, fiona=1.9.5, rasterio, gdal, scipy, beautifulsoup, from qgis.core import *
 
-**Outputs:**
-
-- **CSV (EPSG:3857)** containing:
-  - Travel times for each service category  
-  - Average travel time  
-  - `overall_max` index  
-- **GPKG file** clipped to administrative boundaries of the area for spatial visualization and GIS analysis.
-
----
-### 4. Park Gate Management (POIs)
-
-The algorithm manages **park access points (gates)** as follows:
-
-- Supports external gates via CSV or automatically downloaded OSM gates.  
-- Flexible processing based on `flag_post_download`:
-
-| Mode | Behavior |
-|------|-----------|
-| **AS_IS** | Save gates as they are |
-| **ONLY_A** | Keep only gates within 10 m of park perimeter (type A) |
-| **A_B_C** | Classify gates into: type A or B or C |
-
-**Workflow:**
-
-1. If `flag_or=True`, gates are read from the external CSV.  
-2. If `flag_or=False`, gates and parks are retrieved from OSM.  
-3. Gates are processed according to `flag_post_download`.  
-4. Final gates are saved to: outputPath_bbox/poi/park.csv.
-   
-### 4. Park Access Point Classification
-
-All service categories are represented as point features in OSM, except for parks. For parks, park gates are used as points.
-Each park is assigned access points classified into three types:
-
-- **Type A**: Existing gates Points located within 10 m of the park boundary, identified using the following OSM tags:
-
-    barrier = gate or barrier = entrance or entrance = yes
-
-- **Type B** – Street–park intersections If no Type A gates are found, the tool identifies intersections between the park perimeter and the street network, using any OSM street tagged as:
-
-    'highway'='primary' or 'highway'='primary_link' or 'highway'='secondary' or 'highway'='secondary_link' or 'highway'='tertiary' or 'highway'='tertiary_link' or 'highway'='unclassified' or 'highway'='residential' or 'bicycle_road'='yes' or 'bicycle'='designated' or 'highway'='living_street' or 'highway'='pedestrian' or 'highway'='service' or 'service'='parking_aisle' or 'highway'='escape' or 'highway'='road' or 'highway'='track' or 'highway'='path' or 'highway'='bus_guideway' or 'highway'='footway' or 'highway'='cycleway' or 'highway'='passing_place' or 'cycleway'='lane' or 'cycleway'='track' or 'highway'='steps'
-
-- **Type C** – Virtual access points If no Type A or B points are available, the tool generates virtual gates every 100 m along the park perimeter.
-
----
-
-### 5. QGIS Headless Implementation
+### 2. QGIS Headless Implementation
 
 The algorithm uses **QGIS in offscreen mode** to perform all geospatial computations.  
 Initialization includes:
@@ -175,9 +185,8 @@ Initialization includes:
 - Setting environment variables for headless operation  
 - Initializing the QGIS application and Processing framework
 
----
 
-### 6. Parameter Handling
+### 3. Parameters and Execution
 
 The script reads a `.ini` configuration file to dynamically configure inputs.
 A separate parameter.ini file is created for each city, containing all city-specific parameters.At runtime, the appropriate configuration file must be provided depending on the city being processed. For example, to run the analysis for Parma, the parameter_parma.ini file is used.
@@ -200,7 +209,7 @@ city_name =
 
 Parameters include bounding box, output folder, travel mode (always 'time'), category (usually 'all'), by (for us 'foot') and gate management flags.
 
-**bbox**: rectangular bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max])
+**bbox**: rectangular bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max] in EPSG:4326)
 
 **category**: service category for which the index is calculated (one of 8 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop'] or 'all' for a combined score)
 
@@ -220,15 +229,7 @@ Read using the read_param function, which preserves key case and converts Python
 
 Allows the script to run fully configured via .ini without modifying the code.
 
-### 7. Technical Implementation
-
-**Programming Language:** Python
-
-**Qgis:** install qgis
-
-**Libraries:**
-Pandana, geopandas, numpy, pandas, osmnet, rtree, pyproj, shapely,
-geovoronoi, fiona=1.9.5, rasterio, gdal, scipy, beautifulsoup, from qgis.core import *
+---
 
 **Input Data:** OSM network and PoIs, divided into 8 categories
 
@@ -241,8 +242,9 @@ Execution: Command line or IDE:
 
 It is necessary to specify the correct path of the python instance. This command runs the Python script overallExecutor.py in the background, redirecting both standard output and error messages to the file log.txt.
 
+---
 
-### 8. Main Scripts
+## Main Scripts
 1.	**overallExecutor.py**
 
 This is the main workflow script for the 15-Minute City Proximity Index. Its main responsibilities are:
@@ -258,7 +260,7 @@ o	Data download: Downloads street networks and Points of Interest (PoIs) from Op
 o	Proximity computation: Calls computo to calculate travel times to PoIs for each hexagonal tile and computes the proximity index according to the 15-minute city rules.
 o	Output saving: Uses save_output to merge results and save CSV and GIS files for further analysis.
 
-3.	**gates_green_Areas.py**
+3.	**gates_green_areas.py**
 
 Manages park access points (gates) for “green areas”.
 
