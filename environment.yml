@@ -1,0 +1,54 @@
+name: city_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Python e Core Scientifico (Binari Conda stabili)
+  - python=3.11
+  - numpy<2.0.0
+  - qgis
+  - gdal
+  - pandana
+  - geopandas
+  - rasterio
+  - scipy
+  - scikit-learn
+  - rtree
+  - shapely
+  - fiona
+  - osmnet
+  
+  # Gestore pacchetti pip
+  - pip
+  - pip:
+      # --- Librerie che mancano su Conda o specifiche ---
+      - OSMPythonTools    # <--- ECCOLA!
+      - geovoronoi
+      - beautifulsoup4
+      - lxml
+      
+      # --- Web Framework ---
+      - Flask==3.1.2
+      - Werkzeug==3.1.5
+      - Jinja2==3.1.6
+      - MarkupSafe==3.0.3
+      - itsdangerous==2.2.0
+      
+      # --- Config & Dati ---
+      - python-dotenv
+      - pydantic
+      - pydantic-settings
+      - pydantic-core
+      
+      # --- Networking & Utils ---
+      - requests
+      - urllib3
+      - certifi
+      - idna
+      - charset-normalizer
+      - rich
+      - typer
+      - tqdm
+      - click
+      - colorama
+      - typing-extensions

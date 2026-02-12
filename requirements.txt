@@ -1,0 +1,42 @@
+# --- WEB FRAMEWORK ---
+Flask==3.1.2
+Werkzeug==3.1.5
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+itsdangerous==2.2.0
+
+# --- GEOSPATIAL & NETWORK ---
+geopandas
+shapely
+fiona
+pyproj
+pandana
+osmnet
+Rtree
+scikit-learn
+scipy
+rasterio
+geovoronoi
+
+# --- SCRAPING ---
+beautifulsoup4
+lxml
+
+# --- CONFIG & DATA ---
+python-dotenv
+pydantic
+pydantic-settings
+pydantic-core
+
+# --- NETWORKING & CLI ---
+requests
+urllib3
+certifi
+idna
+charset-normalizer
+rich
+typer
+tqdm
+click
+colorama
+typing-extensions

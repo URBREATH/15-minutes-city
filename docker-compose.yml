@@ -1,0 +1,15 @@
+services:
+  web:
+    image: registry.urbreath.tech/15-minutes-city:0.0.1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_DEBUG=1
+      - QT_QPA_PLATFORM=offscreen # Rinforzo la variabile per QGIS
+    restart: unless-stopped

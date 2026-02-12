@@ -3,6 +3,7 @@
 import geopandas
 import numpy as np
 import pandas as pd
+from enum import Enum
 import pandana
 import osmnet
 from pandana.loaders import osm
