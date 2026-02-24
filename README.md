@@ -245,9 +245,9 @@ Output directory is created at outputPath. Inside it:
 
 - **unique_bbox.csv** → stores key spatial parameters (bounding box extent and representative radius)
 
-- **walkability_all_<aoi_name>.csv** → if category = all **or**
+- **walkability_all_<aoi_name>.csv** → if poi_category_osm = 'all' **or** more than one poi_category_custom_name is specified
 
-- **walkability_<category>_<aoi_name>.csv** → if a specific category is selected (e.g., walkability_education.csv)
+- **walkability_<category>_<aoi_name>.csv** → if a specific poi_category_osm or poi_category_custom_name is selected (e.g., walkability_education.csv)
 
 - **walkability_<category>_<aoi_name>.gpkg** → spatial results, clipped to the optional boundary
 
@@ -255,52 +255,52 @@ Output directory is created at outputPath. Inside it:
 
   - Folder: **osm_pois/** → contains one CSV for each osm category: ['marketgroc', 'restaurantcafe', 'education', 'health', 'postbank', 'park', 'entertainment', 'shop', 'transportstop']
 
-	- If poi_category_osm = all → all categories are downloaded.
+	- If poi_category_osm = 'all' → all csv are downloaded.
 	
-	- If a specific OSM category is selected → only the specified category is downloaded.
+	- If a specific OSM category is selected → only the specified csv is downloaded.
 
-  - Folder: **custom_pois/** – contains CSV files for custom categories, only if poi_category_custom_name is specified.
+  - Folder: **custom_pois/** – contains CSV files for custom categories.
 
-	- Each CSV corresponds to a custom category defined in the parameter file.
+	- If poi_category_custom_name is specified → each CSV file (poi_category_custom_csv) is copied into the folder.
 
 - Street Network
 
   - Folder: **network/** → contains: nodes.csv and edges.csv
 
 ```
-parent_path/
+
 ├── config/
-│   ├── parameters.ini          # Run configuration file
+│   ├── parameters.ini                   # Run configuration file
 │   ├── osm_categories_tag.json          # osm tags used
 ├── scripts/
-│   ├── errors.py      # Errors handler
-│   ├── index_processing.py # Main functions
+│   ├── errors.py                        # Errors handler
+│   ├── index_processing.py             
 │   ├── parameters.py      
 │   ├── park_gates.py
-├── boundary.gpkg           # Optional GeoPackage for clipping
-├── main_15min.py           # Main Python script
+├── boundary.gpkg                        # Optional GeoPackage for clipping
+├── main_15min.py                        # Main Python script
 
 
 ```
 After executing the script, the following structure will be created:  
 ```
-parent_path/
+
 ├── config/
-│   ├── parameters.ini          # Run configuration file
+│   ├── parameters.ini                   # Run configuration file
 │   ├── osm_categories_tag.json          # osm tags used
 ├── scripts/
-│   ├── errors.py      # Errors handler
-│   ├── index_processing.py # Main functions
+│   ├── errors.py                        # Errors handler
+│   ├── index_processing.py 
 │   ├── parameters.py      
 │   ├── park_gates.py
-├── boundary.gpkg           # Optional GeoPackage for clipping
-├── main_15min.py           # Main Python script
+├── boundary.gpkg                        # Optional GeoPackage for clipping
+├── main_15min.py                        # Main Python script
 
 
 Output directory (output_path = parent_path/{...}):
 
 output_path/
-├── walkability_<category><aoi_name>.csv              # Walkability results per category, clipped to boundary if provided
+├── walkability_<category><aoi_name>.csv 	   # Walkability results per category, clipped to boundary if provided
 ├── walkability_<category>_<aoi_name>.gpkg     # Spatial walkability results, clipped to boundary if provided
 ├── osm_pois/                                  # OSM Points of Interest by category
 │   ├── marketgroc.csv
@@ -312,7 +312,7 @@ output_path/
 │   ├── entertainment.csv
 │   ├── shop.csv
 ├── costum_pois/                               # custom Points of Interest by category
-└── network/                               # Street network
+└── network/                                   # Street network
     ├── edges.csv
     └── nodes.csv
 
