@@ -108,6 +108,7 @@ outputPath =
 
 
 **Minimum required parameters: aoi_bbox, aoi_name and execution_outputPath.** If poi_category_osm or poi_category_custom_name are not specified, the script considers poi_category_osm = ‘all’ and proceeds to download the 9 categories from OSM.
+
 ---
 
   
