@@ -12,7 +12,7 @@ This urban planning model envisions that most daily needs should be met within a
 
 - The tool uses either **OpenStreetMap (OSM)** or **costum data** as its data source.
 - Calculates travel time to **POIs** by walking or biking.
-- The tool measures accessibility to **9 fixed categories of POIs**, configurable via the `config/osm_categories_tag.json` file. Each category corresponds to one or more OSM tags and values, which can be modified or extended.
+- The tool measures accessibility to **9 fixed categories of OSM POIs**, configurable via the `config/osm_categories_tag.json` file. Each category corresponds to one or more OSM tags and values, which can be modified or extended.
 
 | poi_category_osm name     | poi_category_osm |
 |---------------------------|------------------|
@@ -27,14 +27,89 @@ This urban planning model envisions that most daily needs should be met within a
 | Transport stops           | `transportstop`  |
 
 Each key in `osm_categories_tag.json` represents a category and maps to OSM tags and possible values.  
+- The tool measures accessibility to **custom POIs** if specified. 
 
 ---
 
 ## Required Inputs
+The script reads a `.ini` configuration file to dynamically configure inputs for the area of interest.
+A separate parameter.ini file is created for each city, containing all city-specific parameters. At runtime, the appropriate configuration file must be provided depending on the city being processed. For example, to run the analysis for Parma, the parameter_parma.ini file is used.
 
-- parameters.ini → configuration file for the area of interest 
+**Example (`parameters.ini`):**
 
+```ini
+[aoi]
+bbox = 
+name = 
+clip_layer_path =
+weight = time
+mode = walk
+walk_speed_kmh =   
+bike_speed_kmh = 
+[poi]
+poi_category_osm = 
+poi_category_custom_name = 
+poi_category_custom_csv = 
+[park]
+park_gates_source = 
+park_gates_osm_buffer_m =  
+park_gates_csv_path = 
+park_gates_virtual_distance_m =  
+[grid]
+grid_path = 
+hex_diameter_m = 
+[execution]
+outputPath = 
+```
+
+[aoi]
+
+**bbox**: rectangular bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max] in EPSG:4326)
+
+**name**: name of the area of interest for which the index is calculates
+
+**clip_layer_path**: path of the boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) 
+
+**weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
+
+**mode**: mode of transportation considered (pedestrian or cycling, default = 'walk’ or 'bike')
+
+**walk_speed_kmh**: walking speed (default = 5 Km/h)  
+
+**bike_speed_kmh**: biking speed (default = 15 Km/h) 
+
+[poi]
+
+**poi_category_osm**: service category for which the index is calculated (one of 9 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop', 'transportstop'] or 'all' for a combined score)
+
+**poi_category_custom_name**: list of custom categories for which the index is calculated. They must be provided as a comma-separated string. The script automatically normalizes the names by removing internal spaces and converting them to lowercase.
+
+**poi_category_custom_csv**: CSV files from which the script reads data for custom categories. The full paths of the CSV files must be provided, separated by commas. The file must include a minimum structure consisting of 'id', 'lat', and 'lon' columns, with geographic coordinates expressed in EPSG:4326.
+
+[park]
+
+**park_gates_source**: source for park gates: osm | csv | road_intersect | virtual. Default: osm.
+
+**park_gates_osm_buffer_m**: buffer distance (meters) applied when park_gates_source = osm to filter gates near parks. Default: 10.
+
+**park_gates_csv_path**: path to CSV file with park gates. Mandatory if park_gates_source = csv. 
+
+**park_gates_virtual_distance_m**: distance in meters used when park_gates_source = virtual to generate virtual gates along parks. Default: 100.
+
+[grid]
+
+**grid_path**: grid path → path to an external grid to be used
+
+**hex_diameter_m** : diameter of the hexagons of the hexagonal grid
+
+[execution]
+
+**outputPath**: output folder → folder where output files and results will be stored
+
+
+**Minimum required parameters: aoi_bbox, aoi_name and execution_outputPath.** If poi_category_osm or poi_category_custom_name are not specified, the script considers poi_category_osm = ‘all’ and proceeds to download the 9 categories from OSM.
 ---
+
   
 ## Algorithm Workflow
 
@@ -44,7 +119,7 @@ Each key in `osm_categories_tag.json` represents a category and maps to OSM tags
 2. If the folder already exists, the process does not overwrite it, preserving previous work.  
 3. Key spatial parameters (area size in lat/lon and representative radius) are computed and stored in a CSV file (unique_bbox.csv).  
 4. The street network is downloaded from OSM, restricted to pedestrian- or bicycle-accessible streets, depending on the selected mode of travel.  
-5. PoIs corresponding to the selected service categories are retrieved.
+5. PoIs corresponding to the selected categories are retrieved.
 
 ---
 
@@ -68,11 +143,11 @@ For each hexagon:
 
 ### 4. Park Gate Management (POIs) and classification
 
-All service categories are represented as point features in OSM, except for parks. For parks, park gates are used as points.
+All service categories in OSM are represented as point features, except for parks, which use park gates as points.
 
 Each park is assigned access points, classified into three types depending on the park_gates_source parameter:
 
-- **Type A**: Gates (from OSM or from an external CSV, depending on configuration) located within 10 m of the park boundary (park_gates_osm_buffer_m). When downloaded from OSM, gates are identified using the following tags:
+- **Type A**: Gates from OSM located within 10 m of the park boundary (park_gates_osm_buffer_m). When downloaded from OSM, gates are identified using the following tags:
 
 ```barrier = gate or barrier = entrance or entrance = yes```
 
@@ -100,22 +175,21 @@ shared_lane
 crossing, link
 ```
 
-- **Type C** – Virtual access points: the tool generates virtual gates every 100 m along the park perimeter (park_gates_virtual_distance_m).
+- **Type C** – Virtual gates generated along the park perimeter every park_gates_virtual_distance_m meters.
 
 
-The algorithm manages **park access points (gates)** as follows:
+The algorithm manages gates as follows:
 
-- Supports external gates via CSV or automatically downloaded OSM gates.  
+- Supports external gates via CSV or automatically downloaded OSM gates.
 
-- Park gates generation based on park_gates_source:
+- Gate generation depends on park_gates_source:
+  - osm → Type A gates within park_gates_osm_buffer_m from the park boundary.
 
-	osm → Type A gates generated automatically from OSM within park_gates_osm_buffer_m of the park boundary.
-	
-	csv → gates are read from the CSV file specified in park_gates_csv_path. The csv must include a minimum structure consisting of 'id', 'lat', and 'lon' columns, with geographic coordinates expressed in EPSG:4326..
-	
-	road_intersect → Type B gates
-	
-	virtual → Type C gates generated every park_gates_virtual_distance_m meters along parks.
+  - csv → Gates read from the CSV specified in park_gates_csv_path, which must include at least id, lat, and lon in EPSG:4326.
+
+  - road_intersect → Type B gates.
+
+  - virtual → Type C gates generated every park_gates_virtual_distance_m meters along the park perimeter.
 
 
 ---
@@ -141,15 +215,15 @@ Output directory is created at outputPath. Inside it:
 
 - Points of Interest (PoIs)
 
-  - Folder: **osm_pois/** → contains one CSV for each osm category: ['marketgroc', 'restaurantcafe', 'education', 'health', 'postbank', 'park', 'entertainment', 'shop']
+  - Folder: **osm_pois/** → contains one CSV for each osm category: ['marketgroc', 'restaurantcafe', 'education', 'health', 'postbank', 'park', 'entertainment', 'shop', 'transportstop']
 
-	If poi_category_osm = all → all categories are downloaded.
+	- If poi_category_osm = all → all categories are downloaded.
 	
-	If a specific OSM category is selected → only the specified category is downloaded.
+	- If a specific OSM category is selected → only the specified category is downloaded.
 
   - Folder: **custom_pois/** – contains CSV files for custom categories, only if poi_category_custom_name is specified.
 
-	Each CSV corresponds to a custom category defined in the parameter file.
+	- Each CSV corresponds to a custom category defined in the parameter file.
 
 - Street Network
 
@@ -228,99 +302,7 @@ Initialization includes:
 - Initializing the QGIS application and Processing framework
 
 
-### 3. Parameters and Execution
-
-The script reads a `.ini` configuration file to dynamically configure inputs.
-A separate parameter.ini file is created for each city, containing all city-specific parameters. At runtime, the appropriate configuration file must be provided depending on the city being processed. For example, to run the analysis for Parma, the parameter_parma.ini file is used.
-
-**Example (`parameters.ini`):**
-
-```ini
-[aoi]
-bbox = 
-name = 
-clip_layer_path =
-weight = time
-mode = walk
-walk_speed_kmh =   
-bike_speed_kmh = 
-[poi]
-poi_category_osm = 
-poi_category_custom_name = 
-poi_category_custom_csv = 
-[park]
-park_gates_source = 
-park_gates_osm_buffer_m =  
-park_gates_csv_path = 
-park_gates_virtual_distance_m =  
-[grid]
-grid_path = 
-hex_diameter_m = 
-[execution]
-outputPath = 
-```
-
-[aoi]
-
-**bbox**: rectangular bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max] in EPSG:4326)
-
-**name**: name of the area of interest for which the index is calculates
-
-**clip_layer_path**: path of the boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) 
-
-**weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
-
-**mode**: mode of transportation considered (pedestrian or cycling, default = 'walk’ or 'bike')
-
-**walk_speed_kmh**: walking speed (default = 5 Km/h)  
-
-**bike_speed_kmh**: biking speed (default = 15 Km/h) 
-
-[poi]
-**poi_category_osm**: service category for which the index is calculated (one of 8 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop'] or 'all' for a combined score)
-
-**poi_category_custom_name**: list of custom categories for which the index will be calculated. 
-
-Format:
-
-- Provided as a comma-separated string.
-
-- The script automatically normalizes the names by removing internal spaces and converting them to lowercase.
-
-**poi_category_custom_csv**: CSV files from which the script reads data for custom categories.
-
-Format:
-
-- Provide the full path(s) to the CSV file(s).
-
-- The file must include a minimum structure consisting of 'id', 'lat', and 'lon' columns, with geographic coordinates expressed in EPSG:4326.
-
-[park]
-
-**park_gates_source**: source for park gates: osm | csv | road_intersect | virtual. Default: osm.
-
-**park_gates_osm_buffer_m**: buffer distance (meters) applied when park_gates_source = osm to filter gates near parks. Default: 10.
-
-**park_gates_csv_path**: path to CSV file with park gates. Mandatory if park_gates_source = csv. Default: empty.
-
-**park_gates_virtual_distance_m**: distance in meters used when park_gates_source = virtual to generate virtual gates along parks. Default: 100.
-
-[grid]
-
-**grid_path**: grid path → path to an external grid to be used
-
-**hex_diameter_m** : diameter of the hexagons of the hexagonal grid
-
-[execution]
-
-**outputPath**: output folder → folder where output files and results will be stored
-
-
-
-
-**Minimum required parameters: aoi_bbox, aoi_name and execution_outputPath.**
-
----
+### 3. Execution
 
 **Input Data:** OSM network and PoIs
 
