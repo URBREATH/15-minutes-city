@@ -11,8 +11,8 @@ This urban planning model envisions that most daily needs should be met within a
 ## Key Features
 
 - The tool uses either **OpenStreetMap (OSM)** or **costum data** as its data source.
-- Calculates travel time to services by walking or biking.
-- The tool measures accessibility to **9 fixed categories of urban services**, configurable via the `config/osm_categories_tag.json` file. Each category corresponds to one or more OSM tags and values, which can be modified or extended.
+- Calculates travel time to **POIs** by walking or biking.
+- The tool measures accessibility to **9 fixed categories of POIs**, configurable via the `config/osm_categories_tag.json` file. Each category corresponds to one or more OSM tags and values, which can be modified or extended.
 
 | poi_category_osm name     | poi_category_osm |
 |---------------------------|------------------|
