@@ -381,7 +381,7 @@ o	Output saving: Uses save_output to merge results and save CSV and GIS files fo
 
 3.	**park_gates.py**
 
-Manages park access points (gates) for “park” category.
+Manages gates for “park” category.
 
 4.	**parameters.py**
 
