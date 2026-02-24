@@ -25,9 +25,8 @@ This urban planning model envisions that most daily needs should be met within a
 
 ## Required Inputs
 
-- parameter.ini → configuration file for the target city
+- parameters.ini → configuration file for the target city
 
-- Optional boundary polygon → used to clip the final results
 ---
   
 ## Algorithm Workflow
@@ -53,9 +52,10 @@ For each hexagon:
 
 1. Travel times to the nearest PoI in each service category are calculated; the model uses network-based accessibility calculations implemented through the **Pandana library** to find the nearest POI for each location. 
 2. Only streets accessible by the chosen mode (foot or bike) are considered.
-3. The walking time used is **5 km/h**.
-4. An average travel time (`overall_average`)  across all categories is computed (sum of POI minutes divided by the number of categories).  
-5. Each hexagon is assigned a value (`overall_max`) based on the maximum travel time
+3. The walking time used is configurable. The default is **5 km/h**.
+4. The biking time used is configurable. The default is **15 km/h**.
+5. An average travel time (`overall_average`)  across all categories is computed (sum of POI minutes divided by the number of categories).  
+6. Each hexagon is assigned a value (`overall_max`) based on the maximum travel time
 
 ---
 
@@ -97,7 +97,7 @@ The algorithm manages **park access points (gates)** as follows:
 ---
 ## **Outputs:**
 The output consists of a vector hexagon layer, provided in two formats (EPSG:3857):
-- **CSV**
+- **CSV**, clipped if a clipping polygon is provided
 - **GPKG file**, clipped if a clipping polygon is provided
 
 Both formats contain travel times for each service category, the average travel time, and the overall_max index.
@@ -190,45 +190,70 @@ Initialization includes:
 The script reads a `.ini` configuration file to dynamically configure inputs.
 A separate parameter.ini file is created for each city, containing all city-specific parameters. At runtime, the appropriate configuration file must be provided depending on the city being processed. For example, to run the analysis for Parma, the parameter_parma.ini file is used.
 
-**Example (`parameter.ini`):**
+**Example (`parameters.ini`):**
 
 ```ini
-[common]
+[aoi]
 bbox = 
-outputPath = 
+name = 
+clip_layer_path =
 weight = time
-category = all
-by = foot
-flag_or = 
-flag_post_download = 
-gate_path =
-clip_layer_path = 
-city_name = 
+mode = walk
+walk_speed_kmh = 5  
+bike_speed_kmh = 15 
+[poi]
+poi_category_osm = 
+poi_category_custom_name = 
+poi_category_custom_csv = 
+[park]
+park_gates_source = 
+park_gates_osm_buffer_m =  
+park_gates_csv_path = 
+park_gates_virtual_distance_m =  
+[grid]
+grid_path = 
+hex_diameter_m = 250
+[execution]
+outputPath = 
 ```
 
-Parameters include bounding box, output folder, travel mode (always 'time'), category (usually 'all'), by (for us 'foot') and gate management flags.
+[aoi section]
 
 **bbox**: rectangular bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max] in EPSG:4326)
 
+**name**: name of the area of interest for which the index is calculates
+
+**clip_layer_path**: path of the boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) 
+
+**weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
+
+**mode**: mode of transportation considered (pedestrian or cycling, default = 'walk’ or 'bike')
+
+**walk_speed_kmh**: walking speed (default = 5 Km/h)  
+
+**bike_speed_kmh**: biking speed (default = 15 Km/h) 
+
+[poi section]
 **category**: service category for which the index is calculated (one of 8 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop'] or 'all' for a combined score)
 
-**by**: mode of transportation considered (pedestrian or cycling, default = 'foot’ or 'bike')
 
 **flag_or**: true or false
 
 **flag_post_download**: possiblity 'asis', 'a', 'abc'
 
-**weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
 
-**clip_layer_path**: path of the boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) (EPSG:3857 preferable)
+
+[poi section]
+[poi section]
+[poi section]
 
 **outputPath**: output folder → folder where output files and results will be stored
 
 **gate_path**:  gate folder → folder where gates are places in case of external gates
 
-**city_name**: name of the city for which the index is calculates
 
-**Minimum required parameters: bbox and outputPath.**
+
+**Minimum required parameters: aoi_bbox, aoi_name and execution_outputPath.**
 
 ---
 
