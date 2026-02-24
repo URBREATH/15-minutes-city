@@ -217,7 +217,7 @@ hex_diameter_m = 250
 outputPath = 
 ```
 
-[aoi section]
+[aoi]
 
 **bbox**: rectangular bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max] in EPSG:4326)
 
@@ -233,23 +233,45 @@ outputPath =
 
 **bike_speed_kmh**: biking speed (default = 15 Km/h) 
 
-[poi section]
-**category**: service category for which the index is calculated (one of 8 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop'] or 'all' for a combined score)
+[poi]
+**poi_category_osm**: service category for which the index is calculated (one of 8 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop'] or 'all' for a combined score)
 
+**poi_category_custom_name**: list of custom categories for which the index will be calculated. 
 
-**flag_or**: true or false
+Format:
 
-**flag_post_download**: possiblity 'asis', 'a', 'abc'
+- Provided as a comma-separated string.
 
+- The script automatically normalizes the names by removing internal spaces and converting them to lowercase.
 
+**poi_category_custom_csv**: CSV files from which the script reads data for custom categories.
 
-[poi section]
-[poi section]
-[poi section]
+Format:
+
+- Provide the full path(s) to the CSV file(s).
+
+- The CSVs should contain all necessary columns expected by the script for processing custom POI categories (id, lat, lon).
+
+[park]
+
+**park_gates_source**: source for park gates: osm | csv | road_intersect | virtual. Default: osm.
+
+**park_gates_osm_buffer_m**: buffer distance (meters) applied when park_gates_source = osm to filter gates near parks. Default: 10.
+
+**park_gates_csv_path**: path to CSV file with park gates. Mandatory if park_gates_source = csv. Default: empty.
+
+**park_gates_virtual_distance_m**: distance in meters used when park_gates_source = virtual to generate virtual gates along parks. Default: 100.
+
+[grid]
+
+**grid_path**: grid path → path to an external grid to be used
+
+**hex_diameter_m** : diameter of the hexagons of the hexagonal grid
+
+[execution]
 
 **outputPath**: output folder → folder where output files and results will be stored
 
-**gate_path**:  gate folder → folder where gates are places in case of external gates
 
 
 
@@ -257,7 +279,7 @@ outputPath =
 
 ---
 
-**Input Data:** OSM network and PoIs, divided into 8 categories
+**Input Data:** OSM network and PoIs
 
 **Output Data:** CSV and GPKG files with travel times, overall_average, overall_max
 
@@ -271,32 +293,37 @@ It is necessary to specify the correct path of the python instance. This command
 ---
 
 ## Main Scripts
-1.	**overallExecutor.py**
+
+1.	**main_15min.py**
 
 This is the main workflow script for the 15-Minute City Proximity Index. Its main responsibilities are:
 
 o	Parameter handling: Reads configuration from a .ini.
 
-o	Perform each step by calling the functions contained in utilityScript.py.
+o	Perform each step by calling the functions contained in index_processing.py.
 
 o	Logging and timing: Prints progress and timing for each step.
 
-2.	**utilityScript.py**
+2.	**index_processing.py**
 
 Contains helper functions used by overallExecutor.py:
 
 o	Bounding box preparation
 
-o	Data download: Downloads street networks and Points of Interest (PoIs) from OpenStreetMap, filtered by mode of transport (walking or biking) and category. 
+o	Data download: Downloads street networks and Points of Interest (PoIs), filtered by mode of transport (walking or biking) and category. 
 
-o	Proximity computation: Calls computo to calculate travel times to PoIs for each hexagonal tile and computes the proximity index according to the 15-minute city rules.
+o	Proximity computation: Calls computo to calculate travel times to PoIs for each hexagonal tile and computes the proximity index.
 
 o	Output saving: Uses save_output to merge results and save CSV and GIS files for further analysis.
 
-3.	**gates_green_areas.py**
+3.	**park_gates.py**
 
-Manages park access points (gates) for “green areas”.
+Manages park access points (gates) for “park” category.
 
 4.	**parameters.py**
 
 Provides functions for reading input parameters from .ini file.
+
+5.	**errors.py**
+
+Error handler module that defines error codes.
