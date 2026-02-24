@@ -62,7 +62,7 @@ hex_diameter_m =
 outputPath = 
 ```
 
-[aoi]
+```[aoi]```
 
 **bbox**: rectangular bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max] in EPSG:4326)
 
@@ -78,7 +78,7 @@ outputPath =
 
 **bike_speed_kmh**: biking speed (default = 15 Km/h) 
 
-[poi]
+```[poi]```
 
 **poi_category_osm**: service category for which the index is calculated (one of 9 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop', 'transportstop'] or 'all' for a combined score)
 
@@ -86,7 +86,7 @@ outputPath =
 
 **poi_category_custom_csv**: CSV files from which the script reads data for custom categories. The full paths of the CSV files must be provided, separated by commas. The file must include a minimum structure consisting of 'id', 'lat', and 'lon' columns, with geographic coordinates expressed in EPSG:4326.
 
-[park]
+```[park]```
 
 **park_gates_source**: source for park gates: osm | csv | road_intersect | virtual. Default: osm.
 
@@ -96,13 +96,13 @@ outputPath =
 
 **park_gates_virtual_distance_m**: distance in meters used when park_gates_source = virtual to generate virtual gates along parks. Default: 100.
 
-[grid]
+```[grid]```
 
 **grid_path**: grid path → path to an external grid to be used
 
 **hex_diameter_m** : diameter of the hexagons of the hexagonal grid
 
-[execution]
+```[execution]```
 
 **outputPath**: output folder → folder where output files and results will be stored
 
@@ -194,14 +194,51 @@ The algorithm manages gates as follows:
 
 
 ---
+
 ## **Outputs:**
 The output consists of a vector hexagon layer, provided in two formats (EPSG:3857):
 - **CSV**, clipped if a clipping polygon is provided
 - **GPKG file**, clipped if a clipping polygon is provided
 
 Both formats contain travel times for each service category, the average travel time, and the overall_max index.
+
 ---
 
+
+## Possible Errors
+
+The tool uses error codes to report issues during execution. Each error has a code and a message. In the logs, each error is prefixed with a timestamp, e.g.:
+
+```
+[timestamp] ERROR_CODE  ERROR_MESSAGE
+```
+
+| Error Code | Error Message |
+|------------|---------------|
+| `ERR_001` | parameters.ini not found or invalid: `<parameters.ini>` |
+| `ERR_002` | Missing required parameter: `oi_bbox | aoi_name | outputPath` |
+| `ERR_003` | outputPath invalid |
+| `ERR_004` | Invalid parameter value weight: `time | distance` |
+| `ERR_005` | Invalid parameter value mode: `walk | bike` |
+| `ERR_006` | Invalid parameter value poi_category_osm: `park | restaurantcafe | …` |
+| `ERR_007` | Invalid parameter value poi_category_custom_name: `Custom category cannot match OSM category` |
+| `ERR_008` | Invalid parameter value poi_category_custom: `Custom categories count must match CSV categories count` |
+| `ERR_009` | Invalid parameter value park_gates_source: `osm | csv | road_network | virtual` |
+| `ERR_010` | park_gates_csv_path missing or invalid |
+| `ERR_011` | poi_category_custom_csv not found `<poi_category_custom_csv>` |
+| `ERR_012` | clip_layer_path not found `<clip_layer_path>` |
+| `ERR_013` | grid_path not found `<grid_path>` |
+
+- The script must always be launched with a valid `.ini` configuration file (`ERR_001`).  
+- **Minimum required parameters** in the section are: `aoi_bbox`, `aoi_name`, and `execution_outputPath`. Missing any triggers `ERR_002`.  
+- All paths (output folder, CSVs, clip layer, grid) must exist when required.  
+- Parameters like `weight`, `mode`, `poi_category_osm`, and `park_gates_source` are validated against allowed values. 
+- Parameter poi_category_custom_name cannot be identical to any existing OSM category (poi_category_osm).
+- poi_category_custom_name are normalized: spaces removed, converted to lowercase.
+- Multiple custom categories (poi_category_custom_name) must be listed comma-separated.
+- CSV files for the custom categories must also be listed comma-separated, in the same order as the categories. The first category uses the first CSV, etc.
+- Every custom category must have one corresponding CSV file, in the same order.
+  
 ## Otput Folder Structure
 
 Output directory is created at outputPath. Inside it:
@@ -299,9 +336,7 @@ geovoronoi, fiona=1.9.5, rasterio, gdal, scipy, beautifulsoup, from qgis.core im
 The algorithm uses **QGIS in offscreen mode** to perform all geospatial computations.  
 Initialization includes:
 - Importing QGIS and Python libraries  
-- Setting environment variables for headless operation  
 - Initializing the QGIS application and Processing framework
-
 
 ### 3. Execution
 
@@ -310,6 +345,7 @@ Initialization includes:
 **Output Data:** CSV and GPKG files with travel times, overall_average, overall_max
 
 Execution: Command line or IDE:
+
 ```ini
 .../python3 main_15min.py parameters.ini > log.txt 2>&1 &
 ```
@@ -318,40 +354,6 @@ It is necessary to specify the correct path of the python instance. This command
 
 ---
 
-## Possible Errors
-
-The tool uses error codes to report issues during execution. Each error has a code and a message. In the logs, each error is prefixed with a timestamp, e.g.:
-
-```
-[timestamp] ERROR_CODE  ERROR_MESSAGE
-```
-
-
-| Error Code | Error Message |
-|------------|---------------|
-| `ERR_001` | parameters.ini not found or invalid: `<parameters.ini>` |
-| `ERR_002` | Missing required parameter: `oi_bbox | aoi_name | outputPath` |
-| `ERR_003` | outputPath invalid |
-| `ERR_004` | Invalid parameter value weight: `time | distance` |
-| `ERR_005` | Invalid parameter value mode: `walk | bike` |
-| `ERR_006` | Invalid parameter value poi_category_osm: `park | restaurantcafe | …` |
-| `ERR_007` | Invalid parameter value poi_category_custom_name: `Custom category cannot match OSM category` |
-| `ERR_008` | Invalid parameter value poi_category_custom: `Custom categories count must match CSV categories count` |
-| `ERR_009` | Invalid parameter value park_gates_source: `osm | csv | road_network | virtual` |
-| `ERR_010` | park_gates_csv_path missing or invalid |
-| `ERR_011` | poi_category_custom_csv not found `<poi_category_custom_csv>` |
-| `ERR_012` | clip_layer_path not found `<clip_layer_path>` |
-| `ERR_013` | grid_path not found `<grid_path>` |
-
-- The script must always be launched with a valid `.ini` configuration file (`ERR_001`).  
-- **Minimum required parameters** in the section are: `aoi_bbox`, `aoi_name`, and `execution_outputPath`. Missing any triggers `ERR_002`.  
-- All paths (output folder, CSVs, clip layer, grid) must exist when required.  
-- Parameters like `weight`, `mode`, `poi_category_osm`, and `park_gates_source` are validated against allowed values. 
-- Parameter poi_category_custom_name cannot be identical to any existing OSM category (poi_category_osm).
-- poi_category_custom_name are normalized: spaces removed, converted to lowercase.
-- Multiple custom categories (poi_category_custom_name) must be listed comma-separated.
-- CSV files for the custom categories must also be listed comma-separated, in the same order as the categories. The first category uses the first CSV, etc.
-- Every custom category must have one corresponding CSV file, in the same order.
 
 ## Main Scripts
 
