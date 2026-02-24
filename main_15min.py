@@ -66,7 +66,7 @@ def validate_parameters(parameters_file):
             missing_fields.append(field)
     
     if missing_fields:
-        raise_error("ERR_002", extra="aoi_bbox | aoi_name | outputPath")
+        raise_error("ERR_002", extra="aoi_bbox | aoi_name | execution_outputPath")
 
 
     weight = aoi_parameters.get('weight') or 'time'
