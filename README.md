@@ -12,7 +12,7 @@ This urban planning model envisions that most daily needs should be met within a
 
 - The tool uses **OpenStreetMap (OSM)** for the network, while **POIs** can come from either **OSM** or **custom data** sources.
 - The tool calculates travel time to **POIs** by walking or biking.
-- The tool measures **accessibility to OSM POIs** defined in the osm_categories_tag.json file, which contains the default POI categories. Each category corresponds to one or more OSM tags and values, which can be modified or extended. Each key in `osm_categories_tag.json` represents a category and maps to OSM tags and possible values.  
+- The tool measures **accessibility to OSM POIs** defined in the `osm_categories_tag.json` file, which contains the default POI categories. Each category corresponds to one or more OSM tags and values, which can be modified or extended. Each key in the json represents a category and maps to OSM tags and possible values.  
 
 | default          | description               |
 |------------------|---------------------------|
