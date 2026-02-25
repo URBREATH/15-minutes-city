@@ -34,12 +34,12 @@ The script reads a `.ini` configuration file:
 ```.ini
 [aoi]
 bbox = [lat_min, lon_min, lat_max, lon_max] in EPSG:4326 defines the area of interest 
-name = name of the area of interest f
+name = name of the area of interest 
 clip_layer_file_path = full path to a GPKG polygon file in EPSG:3857 used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) 
 [execution]
 weight = time | distance
 mode = walk | bike
-walk_speed_kmh =   walking speed (default = 5.0 Km/h)  
+walk_speed_kmh =  walking speed (default = 5.0 Km/h)  
 bike_speed_kmh = biking speed (default = 15.0 Km/h) 
 output_path = path to the folder where output files and results will be stored
 [poi]
@@ -49,7 +49,7 @@ poi_category_custom_csv = full path to CSV files from which the script reads dat
 [park]
 park_gates_source = osm | csv | road_intersect | virtual (default = osm)
 park_gates_osm_buffer_m =  buffer distance (meters) applied when park_gates_source = osm to filter gates near park (default = 10.0)
-park_gates_csv_path = path to CSV file with park gates. Mandatory if park_gates_source = csv
+park_gates_csv_path = full path to CSV file with park gates. Mandatory if park_gates_source = csv
 park_gates_virtual_distance_m =  distance in meters used when park_gates_source = virtual to generate virtual gates along parks (default = 100.)
 [grid]
 grid_path = full path to a GPKG external grid file in EPSG:3857 
