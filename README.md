@@ -10,24 +10,23 @@ This urban planning model envisions that most daily needs should be met within a
 
 ## Key Features
 
-- The tool uses either **OpenStreetMap (OSM)** or **costum data** as its data source.
-- Calculates travel time to **POIs** by walking or biking.
-- The tool measures accessibility to **9 fixed categories of OSM POIs**, configurable via the `config/osm_categories_tag.json` file. Each category corresponds to one or more OSM tags and values, which can be modified or extended.
+- The tool uses **OpenStreetMap (OSM)** for the network, while **POIs** can come from either **OSM** or **custom data** sources.
+- The tool calculates travel time to **POIs** by walking or biking.
+- The tool measures **accessibility to OSM POIs** defined in the osm_categories_tag.json file, which contains the default POI categories. Each category corresponds to one or more OSM tags and values, which can be modified or extended. Each key in `osm_categories_tag.json` represents a category and maps to OSM tags and possible values.  
 
-| poi_category_osm name     | poi_category_osm |
-|---------------------------|------------------|
-| Market and groceries      | `marketgroc`     |
-| Restaurants and cafés     | `restaurantcafe` |
-| Education                 | `education`      |
-| Health                    | `health`         |
-| Banks and post offices    | `postbank`       |
-| Parks                     | `park`           |
-| Entertainment             | `entertainment`  |
-| Shops                     | `shop`           |
-| Transport stops           | `transportstop`  |
+| default          | description               |
+|------------------|---------------------------|
+| `marketgroc`     | Market and groceries      |
+| `restaurantcafe` | Restaurants and cafés     |
+| `education`      | Education                 |
+| `health`         | Health                    |
+| `postbank`       | Banks and post offices    |
+| `park`           | Parks                     |
+| `entertainment`  | Entertainment             |
+| `shop`           | Shops                     |
+| `transportstop`  | Transport stops           |
 
-Each key in `osm_categories_tag.json` represents a category and maps to OSM tags and possible values.  
-- The tool measures accessibility to **custom POIs** if specified. 
+
 
 ---
 
