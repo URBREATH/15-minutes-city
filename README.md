@@ -35,7 +35,6 @@ The script reads a `.ini` configuration file:
 [aoi]
 bbox = [lat_min, lon_min, lat_max, lon_max] in EPSG:4326 defines the area of interest 
 name = name of the area of interest 
-clip_layer_file_path = full path to a GPKG polygon file in EPSG:3857 used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) 
 [execution]
 weight = time | distance
 mode = walk | bike
@@ -44,7 +43,7 @@ bike_speed_kmh = biking speed (default = 15.0 Km/h)
 output_path = path to the folder where output files and results will be stored
 [poi]
 poi_category_osm = all | one of the category in `osm_categories_tag.json`
-poi_category_custom_name = list of custom categories provided as a comma-separated string. The script automatically normalizes the names by removing internal spaces and converting them to lowercase.
+poi_category_custom_name = list of comma-separated string. The script automatically normalizes the names by removing internal spaces and converting them to lowercase.
 poi_category_custom_csv = full path to CSV files from which the script reads data for custom categories. The full paths of the CSV files must be provided, separated by commas. The file must include a minimum structure consisting of 'id', 'lat', and 'lon' columns, with geographic coordinates in EPSG:4326.
 [park]
 park_gates_source = osm | csv | road_intersect | virtual (default = osm)
@@ -54,6 +53,8 @@ park_gates_virtual_distance_m =  distance in meters used when park_gates_source 
 [grid]
 grid_path = full path to a GPKG external grid file in EPSG:3857 
 hex_diameter_m =  diameter (meters) of the hexagons of the hexagonal grid (default = 250.0)
+clip_layer_file_path = full path to a GPKG polygon file in EPSG:3857 used to clip the area of interest (e.g., administrative borders, district boundaries..) 
+
 ```
 
 **Minimum required parameters: aoi_bbox, aoi_name and execution_output_path.** If poi_category_osm or poi_category_custom_name are not specified, the script considers poi_category_osm = ‘all’ and proceeds to download all the categories presented in `osm_categories_tag.json`
