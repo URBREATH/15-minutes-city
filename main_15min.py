@@ -229,7 +229,7 @@ missing = 1 - download(
 )
 
 
-max_attempts = 3
+max_attempts = 1
 attempt = 0    
 while missing != 0  and attempt < max_attempts:
     time.sleep(3)
