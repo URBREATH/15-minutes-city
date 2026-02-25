@@ -56,7 +56,7 @@ grid_path = full path to a GPKG external grid file in EPSG:3857
 hex_diameter_m =  diameter (meters) of the hexagons of the hexagonal grid (default = 250.0)
 ```
 
-**Minimum required parameters: aoi_bbox, aoi_name and execution_outputPath.** If poi_category_osm or poi_category_custom_name are not specified, the script considers poi_category_osm = ‘all’ and proceeds to download all the categories presented in `osm_categories_tag.json`
+**Minimum required parameters: aoi_bbox, aoi_name and execution_output_path.** If poi_category_osm or poi_category_custom_name are not specified, the script considers poi_category_osm = ‘all’ and proceeds to download all the categories presented in `osm_categories_tag.json`
 
 ---
   
