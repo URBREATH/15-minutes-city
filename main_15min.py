@@ -36,20 +36,16 @@ def print_end(msg, t0, t_start_dt):
     )
     return dt
 
-## ---- Leggi credenziali MinIO da variabili d'ambiente ----
-#access_key = os.getenv("MINIO_ACCESS_KEY")
-#secret_key = os.getenv("MINIO_SECRET_KEY")
-#endpoint_url = os.getenv("MINIO_ENDPOINT_URL")  
-#
-#if not access_key or not secret_key or not endpoint_url:
-#    raise ValueError("Le variabili d'ambiente MINIO_ACCESS_KEY, MINIO_SECRET_KEY o MINIO_ENDPOINT_URL non sono impostate!")
+
 
 def validate_parameters(parameters_file):
 
     # ---------------- AOI ----------------
     aoi_parameters = read_param(parameters_file, 'aoi')
     # ---------------- EXECUTION ----------------
+
     execution_parameters = read_param(parameters_file, 'execution')
+
     required_aoi = ['bbox','name']
     required_execution = ['outputpath']
     
@@ -61,6 +57,7 @@ def validate_parameters(parameters_file):
             missing_fields.append(f"aoi_{field}")
     
     # Controlla Execution
+    
     if not section_exists_and_has_fields(parameters_file, 'execution', required_execution):
         for field in required_execution:
             missing_fields.append(field)
@@ -79,13 +76,16 @@ def validate_parameters(parameters_file):
 
 
     # ---------------- POI ----------------
-    poi_parameters = read_param(parameters_file, 'poi')
+    try:
+        poi_parameters = read_param(parameters_file, 'poi')
+    except:
+        poi_parameters =  {}    
     poi_category_osm = poi_parameters.get('poi_category_osm') 
     poi_category_custom_name = poi_parameters.get('poi_category_custom_name')
     poi_category_custom_csv = poi_parameters.get('poi_category_custom_csv')
 
 
-    with open("./config/osm_categories_tag.json", "r", encoding="utf-8") as f:
+    with open("osm_categories_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
             
     # Valid OSM categories
@@ -112,7 +112,10 @@ def validate_parameters(parameters_file):
             raise_error("ERR_008", extra ="custom categories count must match CSV categories counth")
        
     # ---------------- PARK ----------------
-    park_parameters = read_param(parameters_file, 'park')
+    try:
+        park_parameters = read_param(parameters_file, 'park')
+    except:
+        park_parameters =  {}
     park_source = park_parameters.get('park_gates_source') or 'osm'
     valid_park_source = ["osm", "csv", "road_intersect", "virtual"]
     if park_source not in valid_park_source:
@@ -139,7 +142,10 @@ def validate_parameters(parameters_file):
         raise_error("ERR_012", extra=clip_layer_path)
         
     # ---------------- GRID ----------------
-    grid_parameters = read_param(parameters_file, 'grid')
+    try:
+        grid_parameters = read_param(parameters_file, 'grid')
+    except:
+        grid_parameters =  {}
     grid_path = grid_parameters.get('grid_path')
     if grid_path and not os.path.exists(grid_path):
         raise_error("ERR_013", extra=grid_path)
@@ -220,8 +226,8 @@ missing = 1 - download(
     custom_names,
     custom_csvs,
     poi_category_osm,
-    aoi.get('mode'),
-    aoi.get('weight'),
+    aoi.get('mode') or 'walk',
+    aoi.get('weight') or 'time',
     park.get('park_gates_source') or 'osm',
     park.get('park_gates_osm_buffer_m') or 10,
     park.get('park_gates_csv_path') or None,
@@ -239,8 +245,8 @@ while missing != 0  and attempt < max_attempts:
         custom_names,
         custom_csvs,
         poi_category_osm,
-        aoi.get('mode'),
-        aoi.get('weight'),
+        aoi.get('mode') or 'walk',
+        aoi.get('weight') or 'time',
         park.get('park_gates_source') or 'osm',
         park.get('park_gates_osm_buffer_m') or 10,
         park.get('park_gates_csv_path') or None,
@@ -270,10 +276,10 @@ result_computo = computo(
     poi_category_osm,  
     aoi.get('clip_layer_path'),
     aoi.get('name'),
-    aoi.get('bike_speed_kmh'),
-    aoi.get('walk_speed_kmh'),
-    aoi.get('mode'),
-    aoi.get('weight')
+    aoi.get('bike_speed_kmh') or 15,
+    aoi.get('walk_speed_kmh') or 5,
+    aoi.get('mode')  or 'walk',
+    aoi.get('weight') or 'time'
     
 )
 
