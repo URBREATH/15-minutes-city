@@ -51,8 +51,8 @@ import boto3
 warnings.filterwarnings("ignore")
 # Supply the path to the qgis install location:  imposti QGIS per girare senza GUI
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
-QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/bin/qgis", True)
-# QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/", True)
+QgsApplication.setPrefixPath(r"/opt/conda/bin/qgis", True)
+# QgsApplication.setPrefixPath(r"/opt/conda/envs/", True)
 gui_flag = False
 app = QgsApplication([], gui_flag)
 app.initQgis()
@@ -236,101 +236,112 @@ def download_poi_osm(
             categories_to_download = valid_poi_category_osm
         else:
             categories_to_download = {poi_category_osm.lower()}
+ 
+
+        if 'park' in categories_to_download and not os.path.isfile(f"{poi_folder}/park.csv"):
+            print("Downloading park from OSM and handling park gates...", flush=True)
+            try:
+                park_csv_path_local = os.path.join(poi_folder, "park.csv")
+                if park_gates_source == 'osm':
+                    gates1 = safe_osm_query(bbox_tassello, tags='"barrier"="gate"')
+                    gates2 = safe_osm_query(bbox_tassello, tags='"barrier"="entrance"')
+                    gates3 = safe_osm_query(bbox_tassello, tags='"entrance"="yes"')
+                    gates = pd.concat([gates1, gates2, gates3], ignore_index=True)
+                    print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
+                    print(f"Found {len(gates)} park gates from OSM", flush=True)
+                    handle_gates("A", bbox_tassello, outputPath_bbox, gates, None, None, park_csv_path_local, park_gates_osm_buffer_m, None)
+                    print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
+            
+                elif park_gates_source == 'csv' and park_gates_csv_path:
+                    df = pd.read_csv(park_gates_csv_path)
+                    print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
+                    print(f"Loaded {len(df)} park gates from CSV", flush=True)
+                    df.to_csv(park_csv_path_local, index=False)
+                    print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
+            
+                elif park_gates_source == 'road_intersect':
+            
+                    handle_gates("road_intersect", bbox_tassello,outputPath_bbox, None, None, None, park_csv_path_local, None, None)
+                    print()
+                elif park_gates_source == 'virtual':
+                    handle_gates("virtual", bbox_tassello,outputPath_bbox, None, None, None, park_csv_path_local, None, park_gates_virtual_distance_m)
+                    print()
+            except RuntimeError as e:
+                print(e, flush=True)
+                np.savetxt(f"{poi_folder}/park.csv", ['id,lat,lon,amenity'], delimiter=';', fmt='%s')
+            except (HTTPError, requests.exceptions.RequestException) as e:
+                print(e, flush=True)
+                pass
+                                            
+        
+        if 'transportstop' in categories_to_download and not os.path.isfile(f"{poi_folder}/transportstop.csv"):  
+            tag_dict = osm_tags["transportstop"]
+            dfs = []
+            for key, values in tag_dict.items():
+                values_regex = "|".join(values)
+                tags_query = f'"{key}"~"{values_regex}"'
+                df = osm.node_query(
+                    bbox_tassello[0], bbox_tassello[1], bbox_tassello[2], bbox_tassello[3],
+                    tags=tags_query
+                )
+                dfs.append(df)
+            
+            transportstop = pd.concat(dfs, ignore_index=True)
+            transportstop.to_csv(f"{poi_folder}/transportstop.csv", index=False)   
+            
+             
         for osm_cat in categories_to_download:
 
-            if osm_cat == 'park' and not os.path.isfile(f"{poi_folder}/park.csv"):
-                print("Downloading park from OSM and handling park gates...", flush=True)
-                try:
-                    park_csv_path_local = os.path.join(poi_folder, "park.csv")
-                    if park_gates_source == 'osm':
-                        gates1 = safe_osm_query(bbox_tassello, tags='"barrier"="gate"')
-                        gates2 = safe_osm_query(bbox_tassello, tags='"barrier"="entrance"')
-                        gates3 = safe_osm_query(bbox_tassello, tags='"entrance"="yes"')
-                        gates = pd.concat([gates1, gates2, gates3], ignore_index=True)
-                        print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
-                        print(f"Found {len(gates)} park gates from OSM", flush=True)
-                        handle_gates("A", bbox_tassello, outputPath_bbox, gates, None, None, park_csv_path_local, park_gates_osm_buffer_m, None)
-                        print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
-                
-                    elif park_gates_source == 'csv' and park_gates_csv_path:
-                        df = pd.read_csv(park_gates_csv_path)
-                        print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
-                        print(f"Loaded {len(df)} park gates from CSV", flush=True)
-                        df.to_csv(park_csv_path_local, index=False)
-                        print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
-                
-                    elif park_gates_source == 'road_intersect':
-                
-                        handle_gates("road_intersect", bbox_tassello,outputPath_bbox, None, None, None, park_csv_path_local, None, None)
-                        print()
-                    elif park_gates_source == 'virtual':
-                        handle_gates("virtual", bbox_tassello,outputPath_bbox, None, None, None, park_csv_path_local, None, park_gates_virtual_distance_m)
-                        print()
-                except RuntimeError as e:
-                    print(e, flush=True)
-                    np.savetxt(f"{poi_folder}/park.csv", ['id,lat,lon,amenity'], delimiter=';', fmt='%s')
-                except (HTTPError, requests.exceptions.RequestException) as e:
-                    print(e, flush=True)
-                    pass
-                continue                                
-
-            if osm_cat == 'transportstop' and not os.path.isfile(f"{poi_folder}/transportstop.csv"):  
-                tag_dict = osm_tags["transportstop"]
-                dfs = []
-                for key, values in tag_dict.items():
-                    values_regex = "|".join(values)
-                    tags_query = f'"{key}"~"{values_regex}"'
-                    df = osm.node_query(
-                        bbox_tassello[0], bbox_tassello[1], bbox_tassello[2], bbox_tassello[3],
-                        tags=tags_query
-                    )
-                    dfs.append(df)
-                
-                transportstop = pd.concat(dfs, ignore_index=True)
-                transportstop.to_csv(f"{poi_folder}/transportstop.csv", index=False)   
-                continue
             tag_dict = osm_tags[osm_cat]
-
-            if not os.path.isfile(f"{poi_folder}/{osm_cat}.csv"):
-        
-                tag_strings = []
+            dfs = []
+            if not os.path.isfile(f"{poi_folder}/{osm_cat}.csv"):        
+               
                 for key, values in tag_dict.items():
                     values_regex = "|".join(values)
-                    tag_strings.append(f'"{key}"~"{values_regex}"')
-                
-                tags_query = " and ".join(tag_strings)
-                
-                print(f"Downloading {osm_cat} with tags: {tags_query}", flush=True)
-                
-                try:
-                    result = osm.node_query(
-                        bbox_tassello[0],
-                        bbox_tassello[1],
-                        bbox_tassello[2],
-                        bbox_tassello[3],
-                        tags=tags_query
-                    )
-    
-                    result.to_csv(os.path.join(poi_folder, f"{osm_cat}.csv"), index=False)
-                    time.sleep(10) 
-                except:
-                    result = pd.DataFrame(columns=["id","lat","lon"])
-                    result.to_csv(os.path.join(poi_folder, f"{osm_cat}.csv"), index=False)
+                    tag_query = f'"{key}"~"{values_regex}"'
+                               
+                    print(f"Downloading {osm_cat} with tags: {tag_query}", flush=True)
                     
+                    try:
+                        df = osm.node_query(
+                            bbox_tassello[0],
+                            bbox_tassello[1],
+                            bbox_tassello[2],
+                            bbox_tassello[3],
+                            tags=tag_query
+                        )
+                        if df is None or df.empty:
+                            df = pd.DataFrame(columns=["id", "lat", "lon"])
+
+                        dfs.append(df)
+                    except:
+                        empty_df = pd.DataFrame(columns=["id", "lat", "lon"])
+                        dfs.append(empty_df)
+
+                time.sleep(15)                    
+                if len(dfs) > 0:
+                    result = pd.concat(dfs, ignore_index=True)
+                else:
+                    result = pd.DataFrame(columns=["id", "lat", "lon"])
+
+                result.to_csv(
+                    os.path.join(poi_folder, f"{osm_cat}.csv")
+                )
             else:
                 print(f'Category {osm_cat} csv skipped or already presents.', flush = True)                        
     # -------------------
     # CUSTOM CSVs
     # -------------------
-    for name, csv_file in zip(custom_names, custom_csvs):
-        custom_poi_folder = os.path.join(outputPath_bbox, "custom_poi")
-        if not os.path.exists(custom_poi_folder):
-            os.makedirs(custom_poi_folder)
-        csv_path = os.path.join(custom_poi_folder, f"{name}.csv")
-        df = pd.read_csv(csv_file)
-        print(f"Custom CSV '{csv_file}' has {len(df)} rows", flush=True)
-        df.to_csv(csv_path, index=False)
-        print(f"Saved custom CSV as '{name}.csv'", flush=True)
+    if custom_names is not None:
+        for name, csv_file in zip(custom_names, custom_csvs):
+            custom_poi_folder = os.path.join(outputPath_bbox, "custom_poi")
+            if not os.path.exists(custom_poi_folder):
+                os.makedirs(custom_poi_folder)
+            csv_path = os.path.join(custom_poi_folder, f"{name}.csv")
+            df = pd.read_csv(csv_file)
+            print(f"Custom CSV '{csv_file}' has {len(df)} rows", flush=True)
+            df.to_csv(csv_path, index=False)
+            print(f"Saved custom CSV as '{name}.csv'", flush=True)
     
     print('----------------------------------------------------------------------------------------------------------------', flush=True)
     print("DOWNLOAD POIs end.\n", flush=True)
@@ -342,7 +353,9 @@ def download_poi_osm(
 def gates_calculation(park_gdf, gates_df, outputPath_bbox, park_gates_osm_buffer_m, park_gates_virtual_distance_m, streets=None, gate_source='A'):
     temp_dir = os.path.join(QgsProject.instance().homePath(), "temp_gates")
     temp_gpkg = os.path.join(temp_dir, "temp_gates.gpkg")
+    os.makedirs(temp_dir, exist_ok=True)
     
+
     if gates_df is not None:
     
         gates_df = gates_df.copy()
@@ -403,8 +416,7 @@ def gates_calculation(park_gdf, gates_df, outputPath_bbox, park_gates_osm_buffer
         )
      
     # Algoritmo di calcolo gate
-    
-    os.makedirs(temp_dir, exist_ok=True)
+
     streets_layer = QgsVectorLayer(streets.to_json(), "streets", "ogr")
     if not streets_layer.isValid():
         raise ValueError("Layer 'streets' not valid!")
@@ -412,15 +424,14 @@ def gates_calculation(park_gdf, gates_df, outputPath_bbox, park_gates_osm_buffer
         print(f"Streets layer valid with {streets_layer.featureCount()} features.")
     
     if gate_source == 'A':
+    
         alg = GatesA()
         output_gpkg = os.path.join(temp_dir, "gatesA.gpkg")
         # Creazione layer QGIS
-        gates_layer = QgsVectorLayer(f"{temp_gpkg}|layername=gate_osm", "gate_osm", "ogr")
-        for lyr, name in [(gates_layer, "gate_osm")]:
-            if not lyr.isValid():
-                raise ValueError(f"Layer '{name}' not valid!", flush = True)
-            else:
-                print(f"Layer '{name}' valid with {lyr.featureCount()} feature.", flush = True)
+        gates_layer = QgsVectorLayer(gates_gdf.to_json(), "gate_osm", "ogr")
+    
+        gates_gdf.to_file(temp_gpkg, layer='gate_osm', driver='GPKG')
+
         params = {
         'green_areas': park_layer,
         'gate_osm': gates_layer,
@@ -532,30 +543,19 @@ def handle_gates(gate_source, bbox_tassello, outputPath_bbox,  gates, park=None,
 
     with open("./config/osm_categories_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
-    park_tags = osm_tags["park"]        
+    park_tags = osm_tags["park"]
+    leisure_values = park_tags["leisure"]    
     # Query Overpass: tutti i leisure di interesse
-    #query = f"""
-    #(
-    #  way({south},{west},{north},{east})[leisure=park];
-    #  way({south},{west},{north},{east})[leisure=dog_park];
-    #  way({south},{west},{north},{east})[leisure=garden];
-    #  way({south},{west},{north},{east})[leisure=playground];
-    #  way({south},{west},{north},{east})[leisure=fitness_station];
-    #);
-    #out geom;
-    #"""
-    leisure_values = park_tags["leisure"]
-    
     query_parts = []
-    for value in leisure_values:
-        query_parts.append(
-            f'way({south},{west},{north},{east})[leisure="{value}"];'
-        )
-        print(f'way["leisure"="{value}"]({south},{west},{north},{east});')
-    
-    query = "(\n" + "\n".join(query_parts) + "\n);\nout geom;"
-    
-    print(query_parts)
+    for lv in leisure_values:
+        query_parts.append(f'way({south},{west},{north},{east})[leisure={lv}];')
+
+    query = f"""
+    (
+      {'\n  '.join(query_parts)}
+    );
+    out geom;
+    """        
     for attempt in range(8):
         try:
             result = overpass.query(query)
@@ -1141,9 +1141,10 @@ def computo(bbox_tassello, latitude, longitude, radius, outputPath_bbox,custom_n
             f"{outputPath_bbox}/walkability_{output_tag}.csv",
             sep=';', index=False
         )
-        
+   
             
         return 0
 
                    
+
 
