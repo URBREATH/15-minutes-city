@@ -245,11 +245,11 @@ Output directory is created at outputPath. Inside it:
 
 - **unique_bbox.csv** → stores key spatial parameters (bounding box extent and representative radius)
 
-- **walkability_all_<aoi_name>.csv** → if poi_category_osm = 'all' **or** more than one poi_category_custom_name is specified
+- **walkability_all_.csv** → if poi_category_osm = 'all' **or** more than one poi_category_custom_name is specified
 
-- **walkability_<category>_<aoi_name>.csv** → if a specific poi_category_osm or poi_category_custom_name is selected (e.g., walkability_education.csv)
+- **walkability_<category>.csv** → if a specific poi_category_osm or poi_category_custom_name is selected (e.g., walkability_education.csv)
 
-- **walkability_<category>_<aoi_name>.gpkg** → spatial results, clipped to the optional boundary
+- **walkability_<category>_<aoi_name>.gpkg** or **walkability_all_<aoi_name>.gpkg** → spatial results, clipped to the optional boundary
 
 - Points of Interest (PoIs)
 
