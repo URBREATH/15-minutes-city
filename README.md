@@ -29,11 +29,11 @@ This urban planning model envisions that most daily needs should be met within a
 ---
 
 ## Required Inputs
-The script reads a `.ini` configuration file.
+The script reads a `.ini` configuration file:
 
 ```.ini
 [aoi]
-bbox = [lat_min, lon_min, lat_max, lon_max] in EPSG:4326 → defines the area of interest 
+bbox = [lat_min, lon_min, lat_max, lon_max] in EPSG:4326 defines the area of interest 
 name = name of the area of interest f
 clip_layer_file_path = full path to a GPKG polygon file in EPSG:3857 used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) 
 [execution]
