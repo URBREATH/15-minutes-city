@@ -31,9 +31,7 @@ This urban planning model envisions that most daily needs should be met within a
 ## Required Inputs
 The script reads a `.ini` configuration file.
 
-**parameters.ini:**
-
-```ini
+```.ini
 [aoi]
 bbox = [lat_min, lon_min, lat_max, lon_max] in EPSG:4326 → defines the area of interest 
 name = name of the area of interest f
