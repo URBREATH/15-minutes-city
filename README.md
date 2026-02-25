@@ -26,90 +26,41 @@ This urban planning model envisions that most daily needs should be met within a
 | `shop`           | Shops                     |
 | `transportstop`  | Transport stops           |
 
-
-
 ---
 
 ## Required Inputs
-The script reads a `.ini` configuration file to dynamically configure inputs for the area of interest.
-A separate parameter.ini file is created for each city, containing all city-specific parameters. At runtime, the appropriate configuration file must be provided depending on the city being processed. For example, to run the analysis for Parma, the parameter_parma.ini file is used.
+The script reads a `.ini` configuration file.
 
-**Example (`parameters.ini`):**
+**parameters.ini:**
 
 ```ini
 [aoi]
-bbox = 
-name = 
-clip_layer_path =
-weight = time
-mode = walk
-walk_speed_kmh =   
-bike_speed_kmh = 
-[poi]
-poi_category_osm = 
-poi_category_custom_name = 
-poi_category_custom_csv = 
-[park]
-park_gates_source = 
-park_gates_osm_buffer_m =  
-park_gates_csv_path = 
-park_gates_virtual_distance_m =  
-[grid]
-grid_path = 
-hex_diameter_m = 
+bbox = [lat_min, lon_min, lat_max, lon_max] in EPSG:4326 → defines the area of interest 
+name = name of the area of interest f
+clip_layer_file_path = full path to a GPKG polygon file in EPSG:3857 used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) 
 [execution]
-outputPath = 
+weight = time | distance
+mode = walk | bike
+walk_speed_kmh =   walking speed (default = 5.0 Km/h)  
+bike_speed_kmh = biking speed (default = 15.0 Km/h) 
+output_path = path to the folder where output files and results will be stored
+[poi]
+poi_category_osm = all | one of the category in `osm_categories_tag.json`
+poi_category_custom_name = list of custom categories provided as a comma-separated string. The script automatically normalizes the names by removing internal spaces and converting them to lowercase.
+poi_category_custom_csv = full path to CSV files from which the script reads data for custom categories. The full paths of the CSV files must be provided, separated by commas. The file must include a minimum structure consisting of 'id', 'lat', and 'lon' columns, with geographic coordinates in EPSG:4326.
+[park]
+park_gates_source = osm | csv | road_intersect | virtual (default = osm)
+park_gates_osm_buffer_m =  buffer distance (meters) applied when park_gates_source = osm to filter gates near park (default = 10.0)
+park_gates_csv_path = path to CSV file with park gates. Mandatory if park_gates_source = csv
+park_gates_virtual_distance_m =  distance in meters used when park_gates_source = virtual to generate virtual gates along parks (default = 100.)
+[grid]
+grid_path = full path to a GPKG external grid file in EPSG:3857 
+hex_diameter_m =  diameter (meters) of the hexagons of the hexagonal grid (default = 250.0)
 ```
 
-```[aoi]```
-
-**bbox**: rectangular bounding box → defines the area of interest where the index is computed (specified as [lat_min, lon_min, lat_max, lon_max] in EPSG:4326)
-
-**name**: name of the area of interest for which the index is calculates
-
-**clip_layer_path**: path of the boundary polygon → polygon used to limit or clip the area of interest (e.g., administrative borders, district boundaries..) 
-
-**weight**: measurement criterion  → criterion used for accessibility computation (time or distance)
-
-**mode**: mode of transportation considered (pedestrian or cycling, default = 'walk’ or 'bike')
-
-**walk_speed_kmh**: walking speed (default = 5 Km/h)  
-
-**bike_speed_kmh**: biking speed (default = 15 Km/h) 
-
-```[poi]```
-
-**poi_category_osm**: service category for which the index is calculated (one of 9 categories ['marketgroc','restaurantcafe','education','health','postbank','park','entertainment','shop', 'transportstop'] or 'all' for a combined score)
-
-**poi_category_custom_name**: list of custom categories for which the index is calculated. They must be provided as a comma-separated string. The script automatically normalizes the names by removing internal spaces and converting them to lowercase.
-
-**poi_category_custom_csv**: CSV files from which the script reads data for custom categories. The full paths of the CSV files must be provided, separated by commas. The file must include a minimum structure consisting of 'id', 'lat', and 'lon' columns, with geographic coordinates expressed in EPSG:4326.
-
-```[park]```
-
-**park_gates_source**: source for park gates: osm | csv | road_intersect | virtual. Default: osm.
-
-**park_gates_osm_buffer_m**: buffer distance (meters) applied when park_gates_source = osm to filter gates near parks. Default: 10.
-
-**park_gates_csv_path**: path to CSV file with park gates. Mandatory if park_gates_source = csv. 
-
-**park_gates_virtual_distance_m**: distance in meters used when park_gates_source = virtual to generate virtual gates along parks. Default: 100.
-
-```[grid]```
-
-**grid_path**: grid path → path to an external grid to be used
-
-**hex_diameter_m** : diameter of the hexagons of the hexagonal grid
-
-```[execution]```
-
-**outputPath**: output folder → folder where output files and results will be stored
-
-
-**Minimum required parameters: aoi_bbox, aoi_name and execution_outputPath.** If poi_category_osm or poi_category_custom_name are not specified, the script considers poi_category_osm = ‘all’ and proceeds to download the 9 categories from OSM.
+**Minimum required parameters: aoi_bbox, aoi_name and execution_outputPath.** If poi_category_osm or poi_category_custom_name are not specified, the script considers poi_category_osm = ‘all’ and proceeds to download all the categories presented in `osm_categories_tag.json`
 
 ---
-
   
 ## Algorithm Workflow
 
