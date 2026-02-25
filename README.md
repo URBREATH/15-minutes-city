@@ -347,7 +347,7 @@ Initialization includes:
 Execution: Command line or IDE:
 
 ```ini
-.../python3 main_15min.py parameters.ini > log.txt 2>&1 &
+.../python3 main_15min.py ./config/parameters.ini > log.txt 2>&1 &
 ```
 
 It is necessary to specify the correct path of the python instance. This command runs the Python script main_15min.py in the background, redirecting both standard output and error messages to the file log.txt.
