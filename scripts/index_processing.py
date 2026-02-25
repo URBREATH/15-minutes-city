@@ -273,23 +273,54 @@ def download_poi_osm(
                 print(e, flush=True)
                 pass
                                             
+        if 'transportstop' in categories_to_download and not os.path.isfile(f"{poi_folder}/transportstop.csv"):
         
-        if 'transportstop' in categories_to_download and not os.path.isfile(f"{poi_folder}/transportstop.csv"):  
             tag_dict = osm_tags["transportstop"]
             dfs = []
+        
             for key, values in tag_dict.items():
                 values_regex = "|".join(values)
                 tags_query = f'"{key}"~"{values_regex}"'
-                df = osm.node_query(
-                    bbox_tassello[0], bbox_tassello[1], bbox_tassello[2], bbox_tassello[3],
-                    tags=tags_query
-                )
-                dfs.append(df)
-            
-            transportstop = pd.concat(dfs, ignore_index=True)
-            transportstop.to_csv(f"{poi_folder}/transportstop.csv", index=False)   
-            
-             
+        
+                print(f"Downloading transportstop with tags: {tags_query}", flush=True)
+        
+                max_retries = 2
+        
+                for attempt in range(max_retries):
+                    try:
+                        df = osm.node_query(
+                            bbox_tassello[0],
+                            bbox_tassello[1],
+                            bbox_tassello[2],
+                            bbox_tassello[3],
+                            tags=tags_query
+                        )
+        
+                        if df is None or df.empty:
+                            df = pd.DataFrame(columns=["id", "lat", "lon"])
+        
+                        dfs.append(df)
+                        break  
+        
+                    except (HTTPError, requests.exceptions.RequestException) as e:
+                        wait = (15 * (attempt + 1)) + random.uniform(3, 8)
+                        time.sleep(wait)
+        
+                    except Exception as e:
+                        dfs.append(pd.DataFrame(columns=["id", "lat", "lon"]))
+                        break
+        
+                else:
+                    dfs.append(pd.DataFrame(columns=["id", "lat", "lon"]))
+        
+            time.sleep(15)
+        
+            if dfs:
+                transportstop = pd.concat(dfs, ignore_index=True)
+            else:
+                transportstop = pd.DataFrame(columns=["id", "lat", "lon"])
+        
+            transportstop.to_csv(f"{poi_folder}/transportstop.csv", index=False)
         for osm_cat in categories_to_download:
 
             tag_dict = osm_tags[osm_cat]
@@ -300,24 +331,29 @@ def download_poi_osm(
                     values_regex = "|".join(values)
                     tag_query = f'"{key}"~"{values_regex}"'
                                
+                               
                     print(f"Downloading {osm_cat} with tags: {tag_query}", flush=True)
-                    
-                    try:
-                        df = osm.node_query(
-                            bbox_tassello[0],
-                            bbox_tassello[1],
-                            bbox_tassello[2],
-                            bbox_tassello[3],
-                            tags=tag_query
-                        )
-                        if df is None or df.empty:
-                            df = pd.DataFrame(columns=["id", "lat", "lon"])
-
-                        dfs.append(df)
-                    except:
-                        empty_df = pd.DataFrame(columns=["id", "lat", "lon"])
-                        dfs.append(empty_df)
-
+                    max_retries = 2
+                    for attempt in range(max_retries):
+                        try:
+                            df = osm.node_query(
+                                bbox_tassello[0],
+                                bbox_tassello[1],
+                                bbox_tassello[2],
+                                bbox_tassello[3],
+                                tags=tag_query
+                            )
+                            if df is None or df.empty:
+                                df = pd.DataFrame(columns=["id", "lat", "lon"])
+    
+                            dfs.append(df)
+                            break 
+                        except (HTTPError, requests.exceptions.RequestException) as e:
+                            wait = (10 * (attempt + 1)) + random.uniform(2,6)
+                            time.sleep(wait)
+                        except Exception as e:
+                            empty_df = pd.DataFrame(columns=["id", "lat", "lon"])
+                            dfs.append(empty_df)
                 time.sleep(15)                    
                 if len(dfs) > 0:
                     result = pd.concat(dfs, ignore_index=True)
