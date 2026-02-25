@@ -258,27 +258,24 @@ t0_computo = print_start("COMPUTO")
 t_start_computo = datetime.now()
 
 
-#result_computo = computo(
-#    bbox_tassello,
-#    tile.at[0, 'latitude'],
-#    tile.at[0, 'longitude'],
-#    tile.at[0, 'radius'],
-#    execution['outputpath'],
-#    custom_names,
-#    custom_csvs,
-#    grid.get('grid_path'),
-#    poi_category_osm,  
-#    aoi.get('clip_layer_path'),
-#    aoi.get('name'),
-#    aoi.get('bike_speed_kmh'),
-#    aoi.get('walk_speed_kmh'),
-
-#s3_key, access_key, secret_key,endpoint_url
-
-#    aoi.get('mode'),
-#    aoi.get('weight')
-#    
-#)
+result_computo = computo(
+    bbox_tassello,
+    tile.at[0, 'latitude'],
+    tile.at[0, 'longitude'],
+    tile.at[0, 'radius'],
+    execution['outputpath'],
+    custom_names,
+    custom_csvs,
+    grid.get('grid_path'),
+    poi_category_osm,  
+    aoi.get('clip_layer_path'),
+    aoi.get('name'),
+    aoi.get('bike_speed_kmh'),
+    aoi.get('walk_speed_kmh'),
+    aoi.get('mode'),
+    aoi.get('weight')
+    
+)
 
 
 print('----------------------------------------------------------------------------------------------------------------', flush=True)
