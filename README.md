@@ -257,7 +257,7 @@ output_path/
 
 1.	**main_15min.py**
 
-This is the main workflow script for the 15-Minute City Proximity Index. Its main responsibilities are:
+This is the main workflow script for the 15-MinutesIndex. Its main responsibilities are:
 
 o	Parameter handling: Reads configuration from a .ini.
 
@@ -275,7 +275,7 @@ o	Data download: Downloads street networks and Points of Interest (PoIs), filter
 
 o	Proximity computation: Calls computo to calculate travel times to PoIs for each hexagonal tile and computes the proximity index.
 
-o	Output saving: Uses save_output to merge results and save CSV and GIS files for further analysis.
+o	Output saving.
 
 3.	**park_gates.py**
 
