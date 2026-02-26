@@ -40,24 +40,24 @@ weight = time | distance
 mode = walk | bike
 walk_speed_kmh =  walking speed (default = 5.0 Km/h)  
 bike_speed_kmh = biking speed (default = 15.0 Km/h) 
-output_path = path to the folder where output files and results will be stored
+output_path = path to the folder
 [poi]
 poi_category_osm = all | one of the category in `osm_categories_tag.json`
-poi_category_custom_name = list of comma-separated string. The script automatically normalizes the names by removing internal spaces and converting them to lowercase.
-poi_category_custom_csv = full path to CSV files from which the script reads data for custom categories. The full paths of the CSV files must be provided, separated by commas. The file must include a minimum structure consisting of 'id', 'lat', and 'lon' columns, with geographic coordinates in EPSG:4326.
+poi_category_custom_name = comma-separated list; names are lowercased and spaces removed
+poi_category_custom_csv = full CSV paths (comma-separated); required columns: id, lat, lon in EPSG:4326.
 [park]
 park_gates_source = osm | csv | road_intersect | virtual (default = osm)
-park_gates_osm_buffer_m =  buffer distance (meters) applied when park_gates_source = osm to filter gates near park (default = 10.0)
-park_gates_csv_path = full path to CSV file with park gates. Mandatory if park_gates_source = csv
-park_gates_virtual_distance_m =  distance in meters used when park_gates_source = virtual to generate virtual gates along parks (default = 100.)
+park_gates_osm_buffer_m =  OSM park-gate buffer distance in meters (default 10.0)
+park_gates_csv = full path to CSV file with park gates. Mandatory if park_gates_source = csv
+park_gates_virtual_distance_m = distance in meters for virtual park gate generation (default 100).
 [grid]
-grid_path = full path to a GPKG external grid file in EPSG:3857 
+grid_gpkg = full path to a GPKG external grid file in EPSG:3857 
 hex_diameter_m =  diameter (meters) of the hexagons of the hexagonal grid (default = 250.0)
-clip_layer_file_path = full path to a GPKG polygon file in EPSG:3857 used to clip the area of interest (e.g., administrative borders, district boundaries..) 
+clip_layer = full path to a GPKG polygon file in EPSG:3857 used to clip the area of interest (e.g., administrative borders, district boundaries..) 
 
 ```
 
-**Minimum required parameters: aoi_bbox, aoi_name and execution_output_path.** If poi_category_osm or poi_category_custom_name are not specified, the script considers poi_category_osm = ‘all’ and proceeds to download all the categories presented in `osm_categories_tag.json`
+**Minimum required parameters: aoi_bbox, aoi_name and execution_output_path**; default (poi_category_osm = ‘all’).
 
 ---
   
@@ -65,207 +65,53 @@ clip_layer_file_path = full path to a GPKG polygon file in EPSG:3857 used to cli
 
 ### 1. Data Download
 
-1. A dedicated folder is created for the area of interest at the indicated outputPath.  
-2. If the folder already exists, the process does not overwrite it, preserving previous work.  
-3. Key spatial parameters (area size in lat/lon and representative radius) are computed and stored in a CSV file (unique_bbox.csv).  
-4. The street network is downloaded from OSM, restricted to pedestrian- or bicycle-accessible streets, depending on the selected mode of travel.  
-5. PoIs corresponding to the selected categories are retrieved.
+1. The street network is downloaded from OSM, limited to pedestrian or bicycle-accessible streets. If a network file already exists in the output_path folder, it is reused and not downloaded again.The same logic is applied to POIs.
+
+2. Grid parameters are computed and stored in a CSV file (grid_parameters.csv), including the area extent and the hex_radius_m, defined as hex_diameter_m / 2.
+
+3. Points of Interest (PoIs) are processed according to the selected source:
+
+	- for OSM categories, data are downloaded only if the corresponding category CSV is not already present;
+
+	- for custom categories, the provided CSV files are copied into the custom_poi folder if not already present;
 
 ---
 
 ### 2. Hexagonal Grid Generation
 
-- The study area is divided into **hexagonal tiles** with a diameter of 250 m (side = 125 m), generated only where OSM street nodes exist.  
+- The area of interest is divided into **hexagons** with a default hex_diameter_m of 250 m (hex_radius_m = 125 m), generated only where OSM street nodes exist.
 ---
 
 ### 3. Proximity Index Calculation
 
 For each hexagon:
 
-1. Travel times to the nearest PoI in each service category are calculated; the model uses network-based accessibility calculations implemented through the **Pandana library** to find the nearest POI for each location. 
+1. Travel times to the nearest PoI in each category are calculated; the model uses network-based accessibility calculations implemented through the **Pandana library** to find the nearest POI for each location. 
 2. Only streets accessible by the chosen mode (foot or bike) are considered.
-3. The walking time used is configurable. The default is **5 km/h**.
-4. The biking time used is configurable. The default is **15 km/h**.
-5. An average travel time (`overall_average`)  across all categories is computed (sum of POI minutes divided by the number of categories).  
-6. Each hexagon is assigned a value (`overall_max`) based on the maximum travel time
+3. The default walking time used is **5 km/h**.
+4. The default biking time used is **15 km/h**.
+5. Travel times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean travel time across categories) and **overall_max** (maximum travel time among categories).
 
 ---
 
 ### 4. Park Gate Management (POIs) and classification
 
-All service categories in OSM are represented as point features, except for parks, which use park gates as points.
+All POIs categories are points; parks are polygons, but are represented using park gate points.
 
-Each park is assigned access points, classified into three types depending on the park_gates_source parameter:
+Each park is assigned access points, classified into three types depending on the **park_gates_source** parameter:
 
-- **Type A**: Gates from OSM located within 10 m of the park boundary (park_gates_osm_buffer_m). When downloaded from OSM, gates are identified using the following tags:
+- **osm** - Gates from OSM located within 10 m of the park boundary (park_gates_osm_buffer_m). When downloaded from OSM, gates are identified using the tags in `park_osm_tag.json`
 
-```barrier = gate or barrier = entrance or entrance = yes```
+- **road_network** – Gates generated as intersections between the park perimeter and the street network, considering OSM street tagged in `park_road_network_tag.json`
 
-- **Type B** – Gates generated as intersections between the park perimeter and the street network, considering any OSM street tagged as:
-
-```highway	=
-primary, secondary, tertiary
-primary_link, secondary_link, tertiary_link
-unclassified
-residential, living_street, service, pedestrian, track
-footway, bridleway, corridor, path
-steps, ladder, elevator
-road
-cycleway
-
-
-footway = sidewalk, crossing, traffic_island
-
-
-cycleway =
-lane
-track
-share_busway
-shared_lane
-crossing, link
-```
-
-- **Type C** – Virtual gates generated along the park perimeter every park_gates_virtual_distance_m meters.
-
-
-The algorithm manages gates as follows:
-
-- Supports external gates via CSV or automatically downloaded OSM gates.
-
-- Gate generation depends on park_gates_source:
-  - osm → Type A gates within park_gates_osm_buffer_m from the park boundary.
-
-  - csv → Gates read from the CSV specified in park_gates_csv_path, which must include at least id, lat, and lon in EPSG:4326.
-
-  - road_intersect → Type B gates.
-
-  - virtual → Type C gates generated every park_gates_virtual_distance_m meters along the park perimeter.
-
+- **virtual** – Virtual gates generated along the park perimeter every park_gates_virtual_distance_m meters.
 
 ---
 
 ## **Outputs:**
-The output consists of a vector hexagon layer, provided in two formats (EPSG:3857):
-- **CSV**, clipped if a clipping polygon is provided
-- **GPKG file**, clipped if a clipping polygon is provided
-
-Both formats contain travel times for each service category, the average travel time, and the overall_max index.
-
----
-
-
-## Possible Errors
-
-The tool uses error codes to report issues during execution. Each error has a code and a message. In the logs, each error is prefixed with a timestamp, e.g.:
-
-```
-[timestamp] ERROR_CODE  ERROR_MESSAGE
-```
-
-| Error Code | Error Message |
-|------------|---------------|
-| `ERR_001` | parameters.ini not found or invalid: `<parameters.ini>` |
-| `ERR_002` | Missing required parameter: `oi_bbox | aoi_name | outputPath` |
-| `ERR_003` | outputPath invalid |
-| `ERR_004` | Invalid parameter value weight: `time | distance` |
-| `ERR_005` | Invalid parameter value mode: `walk | bike` |
-| `ERR_006` | Invalid parameter value poi_category_osm: `park | restaurantcafe | …` |
-| `ERR_007` | Invalid parameter value poi_category_custom_name: `Custom category cannot match OSM category` |
-| `ERR_008` | Invalid parameter value poi_category_custom: `Custom categories count must match CSV categories count` |
-| `ERR_009` | Invalid parameter value park_gates_source: `osm | csv | road_network | virtual` |
-| `ERR_010` | park_gates_csv_path missing or invalid |
-| `ERR_011` | poi_category_custom_csv not found `<poi_category_custom_csv>` |
-| `ERR_012` | clip_layer_path not found `<clip_layer_path>` |
-| `ERR_013` | grid_path not found `<grid_path>` |
-
-- The script must always be launched with a valid `.ini` configuration file (`ERR_001`).  
-- **Minimum required parameters** in the section are: `aoi_bbox`, `aoi_name`, and `execution_outputPath`. Missing any triggers `ERR_002`.  
-- All paths (output folder, CSVs, clip layer, grid) must exist when required.  
-- Parameters like `weight`, `mode`, `poi_category_osm`, and `park_gates_source` are validated against allowed values. 
-- Parameter poi_category_custom_name cannot be identical to any existing OSM category (poi_category_osm).
-- poi_category_custom_name are normalized: spaces removed, converted to lowercase.
-- Multiple custom categories (poi_category_custom_name) must be listed comma-separated.
-- CSV files for the custom categories must also be listed comma-separated, in the same order as the categories. The first category uses the first CSV, etc.
-- Every custom category must have one corresponding CSV file, in the same order.
-  
-## Otput Folder Structure
-
-Output directory is created at outputPath. Inside it:
-
-- **unique_bbox.csv** → stores key spatial parameters (bounding box extent and representative radius)
-
-- **walkability_all_.csv** → if poi_category_osm = 'all' **or** more than one poi_category_custom_name is specified
-
-- **walkability_<category>.csv** → if a specific poi_category_osm or poi_category_custom_name is selected (e.g., walkability_education.csv)
-
-- **walkability_<category>_<aoi_name>.gpkg** or **walkability_all_<aoi_name>.gpkg** → spatial results, clipped to the optional boundary
-
-- Points of Interest (PoIs)
-
-  - Folder: **osm_pois/** → contains one CSV for each osm category: ['marketgroc', 'restaurantcafe', 'education', 'health', 'postbank', 'park', 'entertainment', 'shop', 'transportstop']
-
-	- If poi_category_osm = 'all' → all csv are downloaded.
-	
-	- If a specific OSM category is selected → only the specified csv is downloaded.
-
-  - Folder: **custom_pois/** – contains CSV files for custom categories.
-
-	- If poi_category_custom_name is specified → each CSV file (poi_category_custom_csv) is copied into the folder.
-
-- Street Network
-
-  - Folder: **network/** → contains: nodes.csv and edges.csv
-
-```
-
-├── config/
-│   ├── parameters.ini                   # Run configuration file
-│   ├── osm_categories_tag.json          # osm tags used
-├── scripts/
-│   ├── errors.py                        # Errors handler
-│   ├── index_processing.py             
-│   ├── parameters.py      
-│   ├── park_gates.py
-├── boundary.gpkg                        # Optional GeoPackage for clipping
-├── main_15min.py                        # Main Python script
-
-
-```
-After executing the script, the following structure will be created:  
-```
-
-├── config/
-│   ├── parameters.ini                   # Run configuration file
-│   ├── osm_categories_tag.json          # osm tags used
-├── scripts/
-│   ├── errors.py                        # Errors handler
-│   ├── index_processing.py 
-│   ├── parameters.py      
-│   ├── park_gates.py
-├── boundary.gpkg                        # Optional GeoPackage for clipping
-├── main_15min.py                        # Main Python script
-
-
-Output directory (output_path = parent_path/{...}):
-
-output_path/
-├── walkability_<category><aoi_name>.csv 	   # Walkability results per category, clipped to boundary if provided
-├── walkability_<category>_<aoi_name>.gpkg     # Spatial walkability results, clipped to boundary if provided
-├── osm_pois/                                  # OSM Points of Interest by category
-│   ├── marketgroc.csv
-│   ├── restaurantcafe.csv
-│   ├── education.csv
-│   ├── health.csv
-│   ├── postbank.csv
-│   ├── park.csv
-│   ├── entertainment.csv
-│   ├── shop.csv
-├── costum_pois/                               # custom Points of Interest by category
-└── network/                                   # Street network
-    ├── edges.csv
-    └── nodes.csv
-
-```
+The output is a hexagon vector layer (clipped if a clipping polygon is provided) in EPSG:3857. Both formats include travel times for each service category, the average travel time, and the overall_max index:
+- **CSV**
+- **GPKG file**
 ---
 
 ##  Technical Architecture
@@ -289,11 +135,7 @@ Initialization includes:
 
 ### 3. Execution
 
-**Input Data:** OSM network and PoIs
-
-**Output Data:** CSV and GPKG files with travel times, overall_average, overall_max
-
-Execution: Command line or IDE:
+ Command line or IDE:
 
 ```ini
 .../python3 main_15min.py ./config/parameters.ini > log.txt 2>&1 &
@@ -302,6 +144,111 @@ Execution: Command line or IDE:
 It is necessary to specify the correct path of the python instance. This command runs the Python script main_15min.py in the background, redirecting both standard output and error messages to the file log.txt.
 
 ---
+
+## Possible Errors
+
+In the logs, each error is prefixed with a timestamp, e.g.:
+
+```
+[timestamp] ERROR_CODE ERROR_MESSAGE
+```
+| Error Code | Error Message |
+|------------|---------------|
+| `ERR_001`  | parameters.ini not found or invalid: `<parameters.ini>` |
+| `ERR_002`  | Missing required parameter: `oi_bbox \| aoi_name \| outputPath` |
+| `ERR_003`  | outputPath invalid |
+| `ERR_004`  | Invalid parameter value weight: `time \| distance` |
+| `ERR_005`  | Invalid parameter value mode: `walk \| bike` |
+| `ERR_006`  | Invalid parameter value poi_category_osm: `park \| restaurantcafe \| …` |
+| `ERR_007`  | Invalid parameter value poi_category_custom_name: `Custom category cannot match OSM category` |
+| `ERR_008`  | Invalid parameter value poi_category_custom: `Custom categories count must match CSV categories count` |
+| `ERR_009`  | Invalid parameter value park_gates_source: `osm \| csv \| road_network \| virtual` |
+| `ERR_010`  | park_gates_csv missing or invalid |
+| `ERR_011`  | poi_category_custom_csv not found `<poi_category_custom_csv>` |
+| `ERR_012`  | clip_layer_path not found `<clip_layer_path>` |
+| `ERR_013`  | grid_path not found `<grid_path>` |
+
+ 
+- Parameter poi_category_custom_name cannot be identical to any existing OSM category (poi_category_osm).
+- poi_category_custom_name are normalized: spaces removed, converted to lowercase.
+- Every custom category must have one corresponding CSV file, in the same order.
+  
+## Otput Folder Structure
+
+Output directory is created at output_path. Inside it:
+
+- **grid_parameters.csv**
+  
+- **walkability_all.csv**: if poi_category_osm = 'all' **or** more than one poi_category_custom_name is specified
+
+- **walkability_<category>.csv**: if a specific poi_category_osm or poi_category_custom_name is selected (e.g., walkability_education.csv)
+
+- **walkability_<category>_<aoi_name>.gpkg** or **walkability_all_<aoi_name>.gpkg**
+
+-  **osm_pois/**: contains one CSV for each osm category
+
+- **custom_pois/**: contains CSV files for custom categories.
+
+- **network/**: contains: nodes.csv and edges.csv
+
+```
+
+├── config/
+│   ├── parameters.ini                   
+│   ├── osm_categories_tag.json
+│   ├── park_road_network_tag.json
+│   ├── park_osm_tag.json   
+├── scripts/
+│   ├── errors.py                        
+│   ├── index_processing.py             
+│   ├── parameters.py      
+│   ├── park_gates.py
+├── boundary.gpkg                        
+├── main_15min.py                       
+
+
+```
+After executing the script, the following structure will be created:  
+```
+
+├── config/
+│   ├── parameters.ini                   
+│   ├── osm_categories_tag.json
+│   ├── park_road_network_tag.json
+│   ├── park_osm_tag.json         
+├── scripts/
+│   ├── errors.py                        
+│   ├── index_processing.py 
+│   ├── parameters.py      
+│   ├── park_gates.py
+├── boundary.gpkg                        
+├── main_15min.py                        
+
+
+Output directory (output_path = parent_path/{...}):
+
+output_path/
+├── walkability_<category>_<aoi_name>.csv 	   
+├── walkability_<category>_<aoi_name>.gpkg
+├── grid_parameters.csv
+├── osm_pois/                                  
+│   ├── marketgroc.csv
+│   ├── restaurantcafe.csv
+│   ├── education.csv
+│   ├── health.csv
+│   ├── postbank.csv
+│   ├── park.csv
+│   ├── entertainment.csv
+│   ├── shop.csv
+├── costum_pois/                               
+└── network/                                   
+    ├── edges.csv
+    └── nodes.csv
+
+```
+---
+
+
 
 
 ## Main Scripts
