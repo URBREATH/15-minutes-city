@@ -102,7 +102,7 @@ All POIs categories are points; parks are polygons, but are represented using pa
 
 Each park is assigned access points, classified into three types depending on the **park_gates_source** parameter:
 
-- **osm** - Gates from OSM located within 10 m of the park boundary (park_gates_osm_buffer_m). When downloaded from OSM, gates are identified using the tags in `park_osm_tag.json`
+- **osm** - Gates from OSM located within 10 m of the park boundary (park_gates_osm_buffer_m). When downloaded from OSM, gates are identified using the tags in `gate_osm_tag.json`
 
 - **road_network** – Gates generated as intersections between the park perimeter and the street network, considering OSM street tagged in `park_road_network_tag.json`
 
