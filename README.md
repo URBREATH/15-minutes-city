@@ -43,8 +43,8 @@ bike_speed_kmh = biking speed (default = 15.0 Km/h)
 output_path = path to the folder
 [poi]
 poi_category_osm = all | one of the category in `osm_categories_tag.json`
-poi_category_custom_name = comma-separated list; names are lowercased and spaces removed
-poi_category_custom_csv = full CSV paths (comma-separated); required columns: id, lat, lon in EPSG:4326.
+poi_category_custom_name = comma-separated list, names are lowercased and spaces removed
+poi_category_custom_csv = full CSV paths (comma-separated) with required columns: id, lat, lon in EPSG:4326.
 [park]
 park_gates_source = osm | csv | road_intersect | virtual (default = osm)
 park_gates_osm_buffer_m =  OSM park-gate buffer distance in meters (default 10.0)
@@ -53,11 +53,13 @@ park_gates_virtual_distance_m = distance in meters for virtual park gate generat
 [grid]
 grid_gpkg = full path to a GPKG external grid file in EPSG:3857 
 hex_diameter_m =  diameter (meters) of the hexagons of the hexagonal grid (default = 250.0)
-clip_layer = full path to a GPKG polygon file in EPSG:3857 used to clip the area of interest (e.g., administrative borders, district boundaries..) 
+clip_layer = full path to a GPKG polygon file in EPSG:3857 used to clip the area of interest 
 
 ```
 
 **Minimum required parameters: aoi_bbox, aoi_name and execution_output_path**; default (poi_category_osm = ‘all’).
+
+A separate parameters_<city>.ini file is created for each city that requires computation, stored in a dedicated folder.
 
 ---
   
