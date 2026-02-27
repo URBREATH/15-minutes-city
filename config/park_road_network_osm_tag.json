@@ -1,0 +1,15 @@
+{
+  "highway_types": [
+    "primary", "primary_link", "secondary", "tertiary",
+    "secondary_link", "tertiary_link", "unclassified",
+    "residential", "living_street", "service", "pedestrian",
+    "track", "footway", "cycleway", "bridleway", "corridor",
+    "path", "steps", "ladder", "elevator", "road"
+  ],
+  "footway_types": [
+    "sidewalk", "crossing", "traffic_island"
+  ],
+  "cycleway_types": [
+    "lane", "track", "share_busway", "shared_lane", "crossing", "link"
+  ]
+}
