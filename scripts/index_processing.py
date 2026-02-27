@@ -167,7 +167,7 @@ def create_bbox(bbox, output_path, output_minio_path,hex_diameter_m, access_key,
                    header='inputBBox;downloadBBox;latitude;longitude;hex_radius_m', comments='')
          
         if access_key and secret_key and endpoint_url:         
-            get_folder(csv_path, output_minio_path,access_key, secret_key, endpoint_url)
+            get_folder(grid_folder, output_minio_path,access_key, secret_key, endpoint_url)
            
         return 0
 
