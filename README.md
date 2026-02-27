@@ -191,7 +191,7 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 
 Output directory is created at output_local_path. Inside it:
 
-- **grid**/: contains the **grid_parameter.csv** and the **grid.gpkg**
+- **grid**: contains the **grid_parameter.csv** and the **grid.gpkg**
   
 - **walkability_all.csv**: if poi_category_osm = 'all' **or** more than one poi_category_custom_name is specified
 
