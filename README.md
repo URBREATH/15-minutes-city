@@ -62,6 +62,8 @@ clip_layer = full path to a GPKG polygon file in EPSG:3857 used to clip the area
 
 A separate parameters_<city>.ini file is created for each city that requires computation, stored in a dedicated folder.
 
+The script automatically saves the hexagonal grid to the working grid folder, naming it grid.gpkg in EPSG:3857. The script also allows the use of an external grid, if provided via the `grid_gpkg` parameter.
+
 ---
   
 ## Algorithm Workflow
@@ -187,9 +189,9 @@ In the logs, each error is prefixed with a timestamp, e.g.:
   
 ## Otput Folder Structure
 
-Output directory is created at output_path. Inside it:
+Output directory is created at output_local_path. Inside it:
 
-- **grid_parameters.csv**
+- **grid**/: contains the **grid_parameter.csv** and the **grid.gpkg**
   
 - **walkability_all.csv**: if poi_category_osm = 'all' **or** more than one poi_category_custom_name is specified
 
@@ -242,7 +244,9 @@ Output directory (output_path = parent_path/{...}):
 output_path/
 ├── walkability_<category>_<filename>.csv 	   
 ├── walkability_<category>_<filename>.gpkg
-├── grid_parameters.csv
+├── grid/
+│   ├── grid_parameter.csv
+│   ├── grid.gpkg
 ├── osm_pois/                                  
 │   ├── marketgroc.csv
 │   ├── restaurantcafe.csv
