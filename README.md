@@ -140,13 +140,13 @@ Initialization includes:
 
 ### 3. Execution
 
-Before running the script, the following environment variables must be set:
+Set the following environment variables only when running the script with direct MinIO publishing. Not required for local execution.
+
 ```
 MINIO_ACCESS_KEY   – Access key used to authenticate with the MinIO service
 MINIO_SECRET_KEY   – Secret key associated with the access key
 MINIO_ENDPOINT_URL – URL of the MinIO endpoint
 ```
-The variables must be set only when the script is executed with direct publishing to MinIO. They are not required when the script is used locally.
 
  Command line or IDE:
 
