@@ -141,8 +141,9 @@ def create_bbox(bbox, output_path, output_minio_path,hex_diameter_m, access_key,
     csv_path = f"{grid_folder}/grid_parameter.csv"
     if os.path.exists(grid_folder):
         print(f"The folder {grid_folder} already exists.\n", flush=True)
-        if access_key and secret_key and endpoint_url:         
-            get_folder(csv_path, output_minio_path,access_key, secret_key, endpoint_url)
+        if access_key and secret_key and endpoint_url: 
+            minio_path = os.path.join(output_minio_path, "grid") 
+            get_folder(csv_path, minio_path,access_key, secret_key, endpoint_url)
         return 0
     else:
         
@@ -161,8 +162,7 @@ def create_bbox(bbox, output_path, output_minio_path,hex_diameter_m, access_key,
         ]
         
         os.makedirs(grid_folder)
-    
-        
+            
         np.savetxt(csv_path, [riga_bbox], delimiter=';', fmt='%s',
                    header='inputBBox;downloadBBox;latitude;longitude;hex_radius_m', comments='')
          
@@ -967,9 +967,16 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
  output_minio_path, bike_speed_kmh, walk_speed_kmh,mode = 'foot', weight='time'):
             
     bbox = json.loads(bbox_tassello)
+    grid_folder = os.path.join(output_path_bbox, "grid")
     if grid_gpkg:
         print(f"Loading existing grid: {grid_gpkg}")
         grid = geopandas.read_file(grid_gpkg)
+        if access_key and secret_key and endpoint_url:  
+            outputPath_grid = os.path.join(grid_folder, "grid.gpkg")
+            grid.to_file(outputPath_grid, driver="GPKG")   
+            minio_path = os.path.join(output_minio_path, "grid")             
+            get_folder(outputPath_grid, minio_path,access_key, secret_key, endpoint_url)
+		
     else:
         lon = []
         lat= []
@@ -1035,14 +1042,16 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         grid = grid.drop('index_right', axis = 1)
        
 
-        grid_folder = os.path.join(output_path_bbox, "grid")
+        
         outputPath_grid = os.path.join(grid_folder, 'grid.gpkg')
         grid.to_file(
         outputPath_grid,
         layer="grid",
         driver="GPKG"
         )
-    
+        if access_key and secret_key and endpoint_url:  
+        	minio_path = os.path.join(output_minio_path, "grid") 
+            get_folder(outputPath_grid, minio_path,access_key, secret_key, endpoint_url)
     # Chiamata della funzione walkScore_minuti        
     result, walk_score = walkScore_minuti(output_path_bbox, poi_category_osm,walk_speed_kmh, bike_speed_kmh, mode, weight)
     
