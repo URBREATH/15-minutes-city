@@ -203,7 +203,7 @@ Output directory is created at output_local_path. Inside it:
 
 - **custom_pois/**: contains CSV files for custom categories.
 
-- **network/**: contains: nodes.csv and edges.csv
+- **osm_network/**: contains: nodes.csv and edges.csv
 
 ```
 
@@ -257,7 +257,7 @@ output_path/
 │   ├── entertainment.csv
 │   ├── shop.csv
 ├── costum_pois/                               
-└── network/                                   
+└── osm_network/                                   
     ├── edges.csv
     └── nodes.csv
 
