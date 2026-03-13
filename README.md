@@ -208,9 +208,9 @@ Output directory is created at output_local_path. Inside it:
 
 - **grid**: contains the **grid_parameter.csv** and the **grid.gpkg**
   
-- **<filename>.csv**
-
-- **<filename>.gpkg** 
+- **`<filename>.csv`**
+- 
+- **`<filename>.gpkg`**
 
 -  **osm_pois/**: contains one CSV for each osm category
 
