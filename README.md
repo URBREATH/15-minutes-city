@@ -11,7 +11,7 @@ This urban planning model envisions that most daily needs should be met within a
 ## Key Features
 
 - The tool uses **OpenStreetMap (OSM)** for the road network, while **POIs** can come from either **OSM** or **custom data** sources.
-- The tool calculates walking time to **POIs** by walking or biking.
+- The tool calculates walking or biking time to **POIs**.
 - **OSM POIs** are defined in the `poi_category_osm_tag.json` file, which contains the preconfigured POI categories. Each key in the JSON represents a category and maps to OSM tags and their possible values, which can be modified or extended. Below are the 9 preconfigured categories:
 
 | poi_category_osm | description               |
