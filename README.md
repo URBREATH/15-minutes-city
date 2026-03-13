@@ -42,7 +42,7 @@ weight = time | distance
 mode = walk | bike
 walk_speed_kmh =  walking speed (default = 5.0 Km/h)  
 bike_speed_kmh = biking speed (default = 15.0 Km/h) 
-sld_osm_style_path = 
+sld_osm_style_path = path to the style for geoserver publication
 [poi]
 poi_category_osm = all | one of the category in `poi_category_osm_tag.json`
 poi_category_custom_name = comma-separated list, names are lowercased and spaces removed
@@ -59,11 +59,11 @@ clip_layer = full path to a GPKG polygon file in EPSG:3857 used to clip the area
 
 ```
 
-**Minimum required parameters: aoi_bbox, execution_filename, execution_output_local_path and execution_output_minio_path**; default (poi_category_osm = ‘all’). The filename identifies the area of interest and is used as the output name for both the CSV and GPKG files.
+**Minimum required parameters: aoi_bbox, execution_filename, execution_output_local_path**; default (poi_category_osm = ‘all’). The filename identifies the area of interest and is used as the output name for both the CSV and GPKG files.
 
-A separate parameters_<city>.ini file is created for each city that requires computation, stored in a dedicated folder.
+A separate `parameters_<city>.ini` file is created for each city that requires computation, stored in a dedicated folder.
 
-The script automatically saves the hexagonal grid to the working grid folder, naming it grid.gpkg in EPSG:3857. The script also allows the use of an external grid, if provided via the `grid_gpkg` parameter.
+The script automatically saves the hexagonal grid to the working grid folder, naming it grid.gpkg. The script also allows the use of an external grid, if provided via the `grid_gpkg` parameter.
 
 ---
   
