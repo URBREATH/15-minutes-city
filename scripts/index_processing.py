@@ -49,11 +49,14 @@ import tempfile
 import glob
 import boto3
 import random
+from scripts.logger import logger
+
+
 warnings.filterwarnings("ignore")
 # Supply the path to the qgis install location:  imposti QGIS per girare senza GUI
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
-QgsApplication.setPrefixPath(r"/opt/conda/bin/qgis", True)
-# QgsApplication.setPrefixPath(r"/opt/conda/", True)
+QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/bin/qgis", True)
+# QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/", True)
 gui_flag = False
 app = QgsApplication([], gui_flag)
 app.initQgis()
@@ -67,7 +70,7 @@ Processing.initialize()
 # processing permette di eseguire algoritmi da codice
 import processing
 
-print("QGIS is active!")
+logger.info("QGIS is active!")
 #Variabili globali
 
 
@@ -140,7 +143,7 @@ def create_bbox(bbox, output_path, output_minio_path,hex_diameter_m, access_key,
     grid_folder = os.path.join(output_path, "grid")
     csv_path = f"{grid_folder}/grid_parameter.csv"
     if os.path.exists(grid_folder):
-        print(f"The folder {grid_folder} already exists.\n", flush=True)
+        logger.info(f"The folder {grid_folder} already exists.\n", )
         if access_key and secret_key and endpoint_url: 
             minio_path = os.path.join(output_minio_path, "grid") 
             get_folder(csv_path, minio_path,access_key, secret_key, endpoint_url)
@@ -221,16 +224,16 @@ def download_poi_osm(
 ):
 
 
-    print('DOWNLOAD POIs start.', flush=True)
-    print('----------------------------------------------------------------------------------------------------------------', flush=True)
+    logger.info('DOWNLOAD POIs start.')
+    logger.info('----------------------------------------------------------------------------------------------------------------')
         
     
     # Clean inputs
     poi_category_osm = poi_category_osm.strip() if poi_category_osm else None
 
-    print('poi_category_osm:', poi_category_osm, flush=True)
-    print('custom_names:', custom_names, flush=True)
-    print('custom_csvs:', custom_csvs, flush=True)
+    logger.info("poi_category_osm: %s", poi_category_osm)
+    logger.info("custom_names: %s", custom_names)
+    logger.info("custom_csvs: %s", custom_csvs)
 
     # Folder for POIs
     poi_folder = os.path.join(output_path_bbox, "osm_poi")
@@ -242,7 +245,7 @@ def download_poi_osm(
     # -------------------
     if poi_category_osm is not None:
        
-        with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
+        with open("/home/script-3-30-300/script_work_chiara/city15_simulation/config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
             osm_tags = json.load(f)
             valid_poi_category_osm = set(osm_tags.keys())
         
@@ -253,11 +256,11 @@ def download_poi_osm(
  
 
         if 'park' in categories_to_download and not os.path.isfile(f"{poi_folder}/park.csv"):
-            print("Downloading park from OSM and handling park gates...", flush=True)
+            logger.info("Downloading park from OSM and handling park gates...")
             try:
                 park_csv_path_local = os.path.join(poi_folder, "park.csv")
                 if park_gates_source == 'osm':
-                    with open("./config/park_gate_osm_tag.json", "r", encoding="utf-8") as f:
+                    with open("/home/script-3-30-300/script_work_chiara/city15_simulation/config/park_gate_osm_tag.json", "r", encoding="utf-8") as f:
                         gate_tags = json.load(f)
                     all_gates = []
 
@@ -273,30 +276,30 @@ def download_poi_osm(
                     #gates2 = safe_osm_query(bbox_tassello, tags='"barrier"="entrance"')
                     #gates3 = safe_osm_query(bbox_tassello, tags='"entrance"="yes"')
                     #gates = pd.concat([gates1, gates2, gates3], ignore_index=True)
-                    print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
-                    print(f"Found {len(gates)} park gates from OSM", flush=True)
+                    logger.info('----------------------------------------------------------------------------------------------------------------')                   
+                    logger.info(f"Found {len(gates)} park gates from OSM")
                     handle_gates("A", bbox_tassello, output_path_bbox, gates, None, None, park_csv_path_local, park_gates_osm_buffer_m, None)
-                    print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
+                    logger.info('----------------------------------------------------------------------------------------------------------------')                    
             
                 elif park_gates_source == 'csv' and park_gates_csv:
                     df = pd.read_csv(park_gates_csv)
-                    print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
-                    print(f"Loaded {len(df)} park gates from CSV", flush=True)
+                    logger.info('----------------------------------------------------------------------------------------------------------------')                    
+                    logger.info(f"Loaded {len(df)} park gates from CSV", )
                     df.to_csv(park_csv_path_local, index=False)
-                    print('----------------------------------------------------------------------------------------------------------------', flush=True)                    
+                    logger.info('----------------------------------------------------------------------------------------------------------------')                    
             
                 elif park_gates_source == 'road_intersect':
             
                     handle_gates("road_intersect", bbox_tassello,output_path_bbox, None, None, None, park_csv_path_local, None, None)
-                    print()
+                    logger.info("")
                 elif park_gates_source == 'virtual':
                     handle_gates("virtual", bbox_tassello,output_path_bbox, None, None, None, park_csv_path_local, None, park_gates_virtual_distance_m)
-                    print()
+                    logger.info("")
             except RuntimeError as e:
-                print(e, flush=True)
+                logger.info(e)
                 np.savetxt(f"{poi_folder}/park.csv", ['id,lat,lon,amenity'], delimiter=';', fmt='%s')
             except (HTTPError, requests.exceptions.RequestException) as e:
-                print(e, flush=True)
+                logger.info(e)
                 pass
                                             
         
@@ -309,7 +312,7 @@ def download_poi_osm(
                 values_regex = "|".join(values)
                 tags_query = f'"{key}"~"{values_regex}"'
         
-                print(f"Downloading transport with tags: {tags_query}", flush=True)
+                logger.info(f"Downloading transport with tags: {tags_query}")
         
                 max_retries = 2
         
@@ -360,7 +363,7 @@ def download_poi_osm(
                     values_regex = "|".join(values)
                     tag_query = f'"{key}"~"{values_regex}"'
                                
-                    print(f"Downloading {osm_cat} with tags: {tag_query}", flush=True)
+                    logger.info(f"Downloading {osm_cat} with tags: {tag_query}")
                     max_retries = 2
                     for attempt in range(max_retries):
                         try:
@@ -393,7 +396,7 @@ def download_poi_osm(
                     os.path.join(poi_folder, f"{osm_cat}.csv")
                 )
             else:
-                print(f'Category {osm_cat} csv skipped or already presents.', flush = True)                        
+                logger.info(f'Category {osm_cat} csv skipped or already presents.')                        
 
         if access_key and secret_key and endpoint_url: 
             get_folder(poi_folder, output_minio_path,access_key, secret_key, endpoint_url)
@@ -408,14 +411,14 @@ def download_poi_osm(
                 os.makedirs(custom_poi_folder)
             csv_path = os.path.join(custom_poi_folder, f"{name}.csv")
             df = pd.read_csv(csv_file)
-            print(f"Custom CSV '{csv_file}' has {len(df)} rows", flush=True)
+            logger.info(f"Custom CSV '{csv_file}' has {len(df)} rows")
             df.to_csv(csv_path, index=False)
-            print(f"Saved custom CSV as '{name}.csv'", flush=True)
+            logger.info(f"Saved custom CSV as '{name}.csv'")
         if access_key and secret_key and endpoint_url: 
             get_folder(custom_poi_folder, output_minio_path,access_key, secret_key, endpoint_url)
     
-    print('----------------------------------------------------------------------------------------------------------------', flush=True)
-    print("DOWNLOAD POIs end.\n", flush=True)
+    logger.info('----------------------------------------------------------------------------------------------------------------')
+    logger.info("DOWNLOAD POIs end.\n")
     return 0
 
 
@@ -474,7 +477,7 @@ def gates_calculation(park_gdf, gates_df, output_path_bbox, park_gates_osm_buffe
     if not park_layer.isValid():
         raise ValueError("Layer 'green_areas' not valid!")
     else:
-        print(f"Park layer valid with {park_layer.featureCount()} features.")   
+        logger.info(f"Park layer valid with {park_layer.featureCount()} features.")   
     
     # Per le streets (se servono)
     if streets is not None and 'unique_id' not in streets.columns:
@@ -492,7 +495,7 @@ def gates_calculation(park_gdf, gates_df, output_path_bbox, park_gates_osm_buffe
     if not streets_layer.isValid():
         raise ValueError("Layer 'streets' not valid!")
     else:
-        print(f"Streets layer valid with {streets_layer.featureCount()} features.")
+        logger.info(f"Streets layer valid with {streets_layer.featureCount()} features.")
     
     if gate_source == 'A':
     
@@ -541,7 +544,7 @@ def gates_calculation(park_gdf, gates_df, output_path_bbox, park_gates_osm_buffe
         result_gdf["lat"] = result_gdf.geometry.y
              
     else:
-        print("[ERROR] generating gates, empty CSV saved", flush=True)
+        logger.info("[ERROR] generating gates, empty CSV saved")
         result_gdf = pd.DataFrame(columns=["lat","lon","amenity"])
               
     return result_gdf
@@ -586,14 +589,14 @@ def safe_osm_query(bbox_4326_tassello, tags, pause=15, max_retries=8):
                     })
 
             if not data:
-                print(f"WARNING: no OSM data for tag {tags}, empty dataframe", flush=True)
+                logger.info(f"WARNING: no OSM data for tag {tags}, empty dataframe")
                 return geopandas.GeoDataFrame(columns=['id','lat','lon','amenity'], geometry="geometry", crs=EPSG_4326)
             else: 
                 return geopandas.GeoDataFrame(data, geometry="geometry", crs=EPSG_4326)
 
         except Exception as e:
             # retry solo su errori reali
-            print(f"[ERROR] querying {tags}: {e} ({attempt+1}/{max_retries})", flush=True)
+            logger.info(f"[ERROR] querying {tags}: {e} ({attempt+1}/{max_retries})")
             time.sleep(pause)
     else:
         # superato max_retries
@@ -612,7 +615,7 @@ def handle_gates(gate_source, bbox_tassello, output_path_bbox,  gates, park=None
     south, west, north, east = bbox_tassello
     south, west, north, east = round(south, 6), round(west, 6), round(north, 6), round(east, 6)
 
-    with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
+    with open("/home/script-3-30-300/script_work_chiara/city15_simulation/config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
     park_tags = osm_tags["park"]
     leisure_values = park_tags["leisure"]    
@@ -623,21 +626,23 @@ def handle_gates(gate_source, bbox_tassello, output_path_bbox,  gates, park=None
 
     query = f"""
     (
-      {'\n  '.join(query_parts)}
+      {'  '.join(query_parts)}
     );
     out geom;
-    """        
+    """      
+    
+
     for attempt in range(8):
         try:
             result = overpass.query(query)
             # Risposta ricevuta → stop retry
             break
         except Exception as e:
-            print(f"Park query attempt {attempt+1} failed: {e}", flush=True)
+            logger.info(f"Park query attempt {attempt+1} failed: {e}")
             time.sleep(15)
     else:
         # Fallito dopo 8 tentativi
-        print("download_parks failed after 8 attempts", flush=True)
+        logger.info("download_parks failed after 8 attempts")
         return geopandas.GeoDataFrame(columns=["id", "amenity", "geometry"], geometry="geometry", crs=EPSG_METRIC)
 
     # Costruisci GeoDataFrame
@@ -660,7 +665,7 @@ def handle_gates(gate_source, bbox_tassello, output_path_bbox,  gates, park=None
     park = geopandas.GeoDataFrame(data, geometry="geometry", crs=EPSG_GATE)
     park = park.to_crs(EPSG_METRIC)
 
-    #print(park)
+    #logger.info(park)
     if gate_source == "A":    
         result_gdf = gates_calculation(park, gates,output_path_bbox,park_gates_osm_buffer_m, park_gates_virtual_distance_m, None, gate_source)
     elif gate_source == "road_intersect":
@@ -677,7 +682,7 @@ def handle_gates(gate_source, bbox_tassello, output_path_bbox,  gates, park=None
     # Controlla se esiste → se sì, elimina
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-        #print(f"Cartella {temp_dir} eliminata")
+        #logger.info(f"Cartella {temp_dir} eliminata")
 
 def download_streets(bbox):
     overpass = Overpass()
@@ -701,10 +706,10 @@ def download_streets(bbox):
             # Risposta ricevuta con codice 200 → interrompo i retry
             break
         except Exception as e:
-            print(f"Attempt {attempt+1} failed: {e}", flush = True)
+            logger.info(f"Attempt {attempt+1} failed: {e}")
             time.sleep(15)
     else:
-        print("download_streets failed after 8 attempts", flush = True)
+        logger.info("download_streets failed after 8 attempts")
         return geopandas.GeoDataFrame(columns=["id", "highway", "cycleway", "footway", "oneway", "bicycle", "geometry"], geometry="geometry")
         
     data = []
@@ -728,7 +733,7 @@ def download_streets(bbox):
     if data:
         gdf =  geopandas.GeoDataFrame(data, geometry="geometry")
         # Lista dei tipi di strade veicolari/pedonali
-        with open("./config/park_road_network_osm_tag.json", "r", encoding="utf-8") as f:
+        with open("/home/script-3-30-300/script_work_chiara/city15_simulation/config/park_road_network_osm_tag.json", "r", encoding="utf-8") as f:
             network_tags = json.load(f)
 
         # estrai le liste
@@ -760,47 +765,49 @@ def download_streets(bbox):
 def download_network_osm(bbox_tassello, output_path_bbox,access_key, secret_key, endpoint_url, output_minio_path, mode='foot', weight='time'):
 
           
-    if not os.path.exists("{}/network".format(output_path_bbox)):
-        os.makedirs("{}/network".format(output_path_bbox))
-        
+    if not os.path.exists("{}/osm_network".format(output_path_bbox)):
+        os.makedirs("{}/osm_network".format(output_path_bbox))
+    local_folder = f"{output_path_bbox}/osm_network"   
     
-    if not os.path.isfile("{}/network/nodes.csv".format(output_path_bbox)) or not os.path.isfile("{}/network/edges.csv".format(output_path_bbox)):    
+    if not os.path.isfile("{}/osm_network/nodes.csv".format(output_path_bbox)) or not os.path.isfile("{}/osm_network/edges.csv".format(output_path_bbox)):    
         
-        print('DOWNLOAD NETWORK start.', flush = True)
-        print('----------------------------------------------------------------------------------------------------------------', flush = True)
+        logger.info('DOWNLOAD NETWORK start.')
+        logger.info('----------------------------------------------------------------------------------------------------------------')
           
         result_get_network, gdf_nodes, gdf_edges = get_network_osm(bbox_tassello, output_path_bbox)
                      
         if  result_get_network == 1:
-            print('Problem in recovering the road network.\n', flush = True)
-            np.savetxt("{}/network/nodes.csv".format(output_path_bbox), ['id,x,y'], delimiter=';', fmt='%s')
-            np.savetxt("{}/network/edges.csv".format(output_path_bbox), ['u,v,length,time'], delimiter=';', fmt='%s')
+            logger.info('Problem in recovering the road network.\n')
+            np.savetxt("{}/osm_network/nodes.csv".format(output_path_bbox), ['id,x,y'], delimiter=';', fmt='%s')
+            np.savetxt("{}/osm_network/edges.csv".format(output_path_bbox), ['u,v,length,time'], delimiter=';', fmt='%s')
             return 0
         tassello_nome = os.path.basename(output_path_bbox)
         index = tassello_nome.replace('tassello', '') 
         demPath = f'{output_path_bbox}/merged_dem_{index}.tif'
     
         if weight == 'time':           
-           print('Calling the function calculate_edges_time_from_nodes.\n', flush =True)
+           logger.info('Calling the function calculate_edges_time_from_nodes.\n')
            result, gdf_edges  = calculate_edges_time_from_nodes(gdf_edges,  mode='foot')
 
         #Salvo il file nodes
-        gdf_nodes.to_csv("{}/network/nodes.csv".format(output_path_bbox), index = False)     
+        gdf_nodes.to_csv("{}/osm_network/nodes.csv".format(output_path_bbox), index = False)     
         #Salvo il file edges
         columns_to_save = ["u", "v", "length", "time"]
         for col in ["time"]:
             if col not in gdf_edges.columns:
                 gdf_edges[col] = np.nan
-        gdf_edges[columns_to_save].to_csv(f"{output_path_bbox}/network/edges.csv", index=False)
-        print('----------------------------------------------------------------------------------------------------------------', flush = True)     
-        print('DOWNLOAD NETWORK end.\n', flush = True)
-    local_folder = f"{output_path_bbox}/network"
+        gdf_edges[columns_to_save].to_csv(f"{output_path_bbox}/osm_network/edges.csv", index=False)
+        logger.info('----------------------------------------------------------------------------------------------------------------')     
+        logger.info('DOWNLOAD NETWORK end.\n')
+    
         
     if access_key and secret_key and endpoint_url: 
         get_folder(local_folder,output_minio_path, access_key, secret_key, endpoint_url)
         
     else:
-        print('Files nodes and edges already exists.\n', flush = True)
+        logger.info('Files nodes and edges already exists.\n')        
+        if access_key and secret_key and endpoint_url: 
+            get_folder(local_folder,output_minio_path, access_key, secret_key, endpoint_url)
         return 0
 			
 	
@@ -833,7 +840,7 @@ def crea_linestring(row, nodes):
         v_x, v_y = nodes.loc[v, 'x'], nodes.loc[v, 'y']
         return LineString([(u_x, u_y), (v_x, v_y)])
     except Exception as e:
-        print(f"[ERROR] during the crea_linestring: {e}.\n", flush = True)        
+        logger.info(f"[ERROR] during the crea_linestring: {e}.\n")        
 
 # -----------------------------------------------------------------------------------------------------------------------------------
 
@@ -850,9 +857,9 @@ def calculate_edges_time_from_nodes(gdf_edges, mode='foot'):
     gdf_edges = gdf_edges.dropna(subset=['geometry']) 
                 
     slope_abs = gdf_edges['slope'].abs()
-    print(f"Value max of |slope|: {slope_abs.max()}\n")
-    print(f"Value min of |slope|: {slope_abs.min()}\n")
-    print(f"Value medium of |slope|: {slope_abs.mean()}\n")
+    logger.info(f"Value max of |slope|: {slope_abs.max()}\n")
+    logger.info(f"Value min of |slope|: {slope_abs.min()}\n")
+    logger.info(f"Value medium of |slope|: {slope_abs.mean()}\n")
     for index, row in gdf_edges.iterrows():
        
         velocita = coefficiente * math.exp(-3.5 * abs(gdf_edges.at[index, 'slope'] + 0.05))
@@ -887,8 +894,8 @@ def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_sp
             velocita = (bike_speed_kmh / 3.6)
             peso = DISTMAX_BIKE                            
      
-    nodes = pd.read_csv("{}/network/nodes.csv".format(output_path_bbox), index_col=0)
-    edges = pd.read_csv("{}/network/edges.csv".format(output_path_bbox), index_col=[0,1])
+    nodes = pd.read_csv("{}/osm_network/nodes.csv".format(output_path_bbox), index_col=0)
+    edges = pd.read_csv("{}/osm_network/edges.csv".format(output_path_bbox), index_col=[0,1])
     edges = edges.reset_index()
     
     if not edges.empty:
@@ -917,7 +924,7 @@ def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_sp
             list_string.append(name)
             pois.append(df)
         
-        print("POIs categories:", list_string, flush=True)
+        logger.info("POIs categories: %s", list_string)
          
         if weight == 'time':
         
@@ -950,7 +957,7 @@ def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_sp
         
 
          
-        print('Function walkScore_minuti completed.\n', flush = True)
+        logger.info('Function walkScore_minuti completed.\n')
         
         return 0, walk_score    
 
@@ -964,19 +971,18 @@ def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_sp
 
 
 def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,custom_names,custom_csvs,grid_gpkg,poi_category_osm, clip_layer, filename,access_key,secret_key,endpoint_url,
- output_minio_path, bike_speed_kmh, walk_speed_kmh,mode = 'foot', weight='time'):
+ sld_osm_style_path,output_minio_path, bike_speed_kmh, walk_speed_kmh,mode = 'foot', weight='time'):
             
     bbox = json.loads(bbox_tassello)
     grid_folder = os.path.join(output_path_bbox, "grid")
     if grid_gpkg:
-        print(f"Loading existing grid: {grid_gpkg}")
+        logger.info(f"Loading existing grid: {grid_gpkg}")
         grid = geopandas.read_file(grid_gpkg)
         if access_key and secret_key and endpoint_url:  
             outputPath_grid = os.path.join(grid_folder, "grid.gpkg")
             grid.to_file(outputPath_grid, driver="GPKG")   
             minio_path = os.path.join(output_minio_path, "grid")             
             get_folder(outputPath_grid, minio_path,access_key, secret_key, endpoint_url)
-		
     else:
         lon = []
         lat= []
@@ -1013,9 +1019,9 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         #try:
         #    region_polys, region_pts = voronoi_regions_from_coords(centri.geometry, boundary_shape)
         #except Exception as e:
-        #    print("❌ Errore in voronoi_regions_from_coords:", e)
-        #    print("Numero centri:", len(centri))
-        #    print("BBox:", bbox)
+        #    logger.info("❌ Errore in voronoi_regions_from_coords:", e)
+        #    logger.info("Numero centri:", len(centri))
+        #    logger.info("BBox:", bbox)
         #    return 1
         #### ONLY ATHENS
         
@@ -1050,8 +1056,9 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         driver="GPKG"
         )
         if access_key and secret_key and endpoint_url:  
-        	minio_path = os.path.join(output_minio_path, "grid") 
+            minio_path = os.path.join(output_minio_path, "grid") 
             get_folder(outputPath_grid, minio_path,access_key, secret_key, endpoint_url)
+            
     # Chiamata della funzione walkScore_minuti        
     result, walk_score = walkScore_minuti(output_path_bbox, poi_category_osm,walk_speed_kmh, bike_speed_kmh, mode, weight)
     
@@ -1062,7 +1069,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         header = 
         'geometry;overall_average;overall_max', 
         comments='')
-        print('The walkScore_minuti function does not return a ws to work on.', flush = True)
+        logger.info('The walkScore_minuti function does not return a ws to work on.')
         if access_key and secret_key and endpoint_url: 
             get_folder(result, output_minio_path,access_key, secret_key, endpoint_url)
         return 0
@@ -1100,7 +1107,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             name = os.path.splitext(os.path.basename(f))[0]
             categories.append(name)
         
-        print("POIs categories:", categories, flush=True)
+        logger.info("POIs categories: %s", categories)
         
 
         for cat in categories:
@@ -1225,7 +1232,34 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         )
         if access_key and secret_key and endpoint_url: 
             get_folder(f"{output_path_bbox}/{filename}.gpkg", output_minio_path,access_key, secret_key, endpoint_url)
-            get_folder(f"{output_path_bbox}/{filename}.csv", output_minio_path, access_key, secret_key, endpoint_url)            
+            get_folder(f"{output_path_bbox}/{filename}.csv", output_minio_path, access_key, secret_key, endpoint_url)         
+        
+            if sld_osm_style_path:
+                get_folder(sld_osm_style_path, output_minio_path,access_key, secret_key, endpoint_url)
+                parts = output_minio_path.split("/", 1)[1]
+                #categories.append("overall_average")
+                #categories.append("overall_max")
+                #for category in categories:
+                category = 'education'
+                data = {
+                    "analysis": "15min",
+                    "data": [
+                        {
+                            "workspace": f"{filename}_{category}",
+                            "store_name": f"{filename}_{category}",
+                            "data_path": f"{parts}/{filename}.gpkg",
+                            "style_name": f"{category}",
+                            "sld_path": f"{parts}/style/{category}.sld",
+                            "write_on_catalogue": False
+                        }
+                    ]
+                }
+                
+                with open(f"{output_path_bbox}/_publish.json", "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                                    
+                get_folder(f"{output_path_bbox}/_publish.json", output_minio_path,access_key, secret_key, endpoint_url)
+            
         return 0
 
                    
@@ -1264,11 +1298,11 @@ def upload_on_minio(local_file, filepath, access_key, secret_key,endpoint_url):
     )
 
 
-    #print(f"[INFO] Uploading {local_file} → s3://{bucket_name}/{filepath}", flush=True)
+    #logger.info(f"[INFO] Uploading {local_file} → s3://{bucket_name}/{filepath}")
 
     # ---- Upload file ----
     s3.upload_file(local_file, bucket_name, filepath)
 
-    print(f"[SUCCESS] Upload on MinIO completed!", flush=True)
+    logger.info(f"[SUCCESS] Upload on MinIO completed!")
 
 
