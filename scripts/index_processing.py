@@ -245,7 +245,7 @@ def download_poi_osm(
     # -------------------
     if poi_category_osm is not None:
        
-        with open("/home/script-3-30-300/script_work_chiara/city15_simulation/config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
+        with open("/config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
             osm_tags = json.load(f)
             valid_poi_category_osm = set(osm_tags.keys())
         
@@ -260,7 +260,7 @@ def download_poi_osm(
             try:
                 park_csv_path_local = os.path.join(poi_folder, "park.csv")
                 if park_gates_source == 'osm':
-                    with open("/home/script-3-30-300/script_work_chiara/city15_simulation/config/park_gate_osm_tag.json", "r", encoding="utf-8") as f:
+                    with open("/config/park_gate_osm_tag.json", "r", encoding="utf-8") as f:
                         gate_tags = json.load(f)
                     all_gates = []
 
@@ -615,7 +615,7 @@ def handle_gates(gate_source, bbox_tassello, output_path_bbox,  gates, park=None
     south, west, north, east = bbox_tassello
     south, west, north, east = round(south, 6), round(west, 6), round(north, 6), round(east, 6)
 
-    with open("/home/script-3-30-300/script_work_chiara/city15_simulation/config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
+    with open("/config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
     park_tags = osm_tags["park"]
     leisure_values = park_tags["leisure"]    
@@ -733,7 +733,7 @@ def download_streets(bbox):
     if data:
         gdf =  geopandas.GeoDataFrame(data, geometry="geometry")
         # Lista dei tipi di strade veicolari/pedonali
-        with open("/home/script-3-30-300/script_work_chiara/city15_simulation/config/park_road_network_osm_tag.json", "r", encoding="utf-8") as f:
+        with open("/config/park_road_network_osm_tag.json", "r", encoding="utf-8") as f:
             network_tags = json.load(f)
 
         # estrai le liste
