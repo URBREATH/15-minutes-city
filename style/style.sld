@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc" xmlns:se="http://www.opengis.net/se" xsi:schemaLocation="http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/StyledLayerDescriptor.xsd" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <NamedLayer>
-    <se:Name>urbreath_parma_walkability_education</se:Name>
+    <se:Name>filename</se:Name>
     <UserStyle>
-      <se:Name>urbreath_parma_walkability_education</se:Name>
+      <se:Name>filename</se:Name>
       <se:FeatureTypeStyle>
         <se:Rule>
           <se:Name>less than 5 min</se:Name>
@@ -14,10 +14,10 @@
             <ogc:And>
               <ogc:PropertyIsLessThanOrEqualTo>
                 <ogc:Literal>0</ogc:Literal>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
               </ogc:PropertyIsLessThanOrEqualTo>
               <ogc:PropertyIsLessThan>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
                 <ogc:Literal>5</ogc:Literal>
               </ogc:PropertyIsLessThan>
             </ogc:And>
@@ -44,10 +44,10 @@
             <ogc:And>
               <ogc:PropertyIsLessThanOrEqualTo>
                 <ogc:Literal>5</ogc:Literal>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
               </ogc:PropertyIsLessThanOrEqualTo>
               <ogc:PropertyIsLessThan>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
                 <ogc:Literal>10</ogc:Literal>
               </ogc:PropertyIsLessThan>
             </ogc:And>
@@ -74,10 +74,10 @@
             <ogc:And>
               <ogc:PropertyIsLessThanOrEqualTo>
                 <ogc:Literal>10</ogc:Literal>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
               </ogc:PropertyIsLessThanOrEqualTo>
               <ogc:PropertyIsLessThan>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
                 <ogc:Literal>15</ogc:Literal>
               </ogc:PropertyIsLessThan>
             </ogc:And>
@@ -104,10 +104,10 @@
             <ogc:And>
               <ogc:PropertyIsLessThanOrEqualTo>
                 <ogc:Literal>15</ogc:Literal>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
               </ogc:PropertyIsLessThanOrEqualTo>
               <ogc:PropertyIsLessThan>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
                 <ogc:Literal>20</ogc:Literal>
               </ogc:PropertyIsLessThan>
             </ogc:And>
@@ -134,10 +134,10 @@
             <ogc:And>
               <ogc:PropertyIsLessThanOrEqualTo>
                 <ogc:Literal>20</ogc:Literal>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
               </ogc:PropertyIsLessThanOrEqualTo>
               <ogc:PropertyIsLessThan>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
                 <ogc:Literal>25</ogc:Literal>
               </ogc:PropertyIsLessThan>
             </ogc:And>
@@ -164,10 +164,10 @@
             <ogc:And>
               <ogc:PropertyIsLessThanOrEqualTo>
                 <ogc:Literal>25</ogc:Literal>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
               </ogc:PropertyIsLessThanOrEqualTo>
               <ogc:PropertyIsLessThan>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
                 <ogc:Literal>30</ogc:Literal>
               </ogc:PropertyIsLessThan>
             </ogc:And>
@@ -194,10 +194,10 @@
             <ogc:And>
               <ogc:PropertyIsLessThanOrEqualTo>
                 <ogc:Literal>30</ogc:Literal>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
               </ogc:PropertyIsLessThanOrEqualTo>
               <ogc:PropertyIsLessThan>
-                <ogc:PropertyName>education</ogc:PropertyName>
+                <ogc:PropertyName>category</ogc:PropertyName>
                 <ogc:Literal>60</ogc:Literal>
               </ogc:PropertyIsLessThan>
             </ogc:And>
