@@ -1,5 +1,6 @@
 import sys
 from datetime import datetime
+from scripts.logger import logger
 
 
 def ts():
@@ -50,13 +51,13 @@ def raise_error(code, extra=None, exit_code=1):
 
     detail_str = " | ".join(details)
 
-    print("--------------------------------------------------------------------------------", flush=True)
+    logger.info("--------------------------------------------------------------------------------")
     if detail_str:
-        print(f"[{ts()}] {code} {message}: {detail_str}", flush=True)
+        logger.info(f"[{ts()}] {code} {message}: {detail_str}")
     else:
-        print(f"[{ts()}] {code} {message}", flush=True)    
+        logger.info(f"[{ts()}] {code} {message}")    
 
-    print("--------------------------------------------------------------------------------", flush=True)
+    logger.info("--------------------------------------------------------------------------------")
 
     # Stop script execution
     sys.exit(exit_code)
