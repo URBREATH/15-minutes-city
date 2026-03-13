@@ -29,7 +29,7 @@ This urban planning model envisions that most daily needs should be met within a
 ---
 
 ## Parameters CLI
-The script reads a `.ini` configuration file:
+The CLI version of the script reads a `.ini` configuration file:
 
 ```.ini
 [aoi]
