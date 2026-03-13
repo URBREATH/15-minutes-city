@@ -257,8 +257,8 @@ After executing the script, the following structure will be created:
 Output directory (output_path = parent_path/{...}):
 
 output_path/
-├── `<filename>.csv`   
-├── `<filename>.gpkg`
+├── <filename>.csv   
+├── <filename>.gpkg
 ├── grid/
 │   ├── grid_parameter.csv
 │   ├── grid.gpkg
