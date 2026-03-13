@@ -192,6 +192,13 @@ If the parameter `sld_osm_style_path` is specified, the publisher automatically 
 
 The tool retrieves the style files and automatically generates a `publish.json` configuration file. This file contains the information required to publish the result and its associated style to both IDRA and GeoServer.
 
+An example style.sld file is provided in the style folder. In this file:
+
+- category must match the name of the category being published.
+
+- filename must match the filename of the generated output layer.
+
+A separate SLD file must be provided for each category (e.g. education, health, etc.), as well as for the overall_average and overall_max.
 
 ## Log rotation
 
