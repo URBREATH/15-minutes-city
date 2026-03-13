@@ -1,4 +1,4 @@
-# 15-minutes-city
+# 15-minutes-city 
 Open-source tool for 15-minute city analysis.
 
 ## Overview and Purpose
@@ -11,7 +11,7 @@ This urban planning model envisions that most daily needs should be met within a
 ## Key Features
 
 - The tool uses **OpenStreetMap (OSM)** for the road network, while **POIs** can come from either **OSM** or **custom data** sources.
-- The tool calculates travel time to **POIs** by walking or biking.
+- The tool calculates walking time to **POIs** by walking or biking.
 - **OSM POIs** are defined in the `poi_category_osm_tag.json` file, which contains the preconfigured POI categories. Each key in the JSON represents a category and maps to OSM tags and their possible values, which can be modified or extended. Below are the 9 preconfigured categories:
 
 | poi_category_osm | description               |
@@ -24,11 +24,11 @@ This urban planning model envisions that most daily needs should be met within a
 | `park`           | Parks                     |
 | `entertainment`  | Entertainment             |
 | `shop`           | Shops                     |
-| `transportstop`  | Transport stops           |
+| `transport`      | Public transport stops    |
 
 ---
 
-## Required Inputs
+## Parameters CLI
 The script reads a `.ini` configuration file:
 
 ```.ini
@@ -42,6 +42,7 @@ weight = time | distance
 mode = walk | bike
 walk_speed_kmh =  walking speed (default = 5.0 Km/h)  
 bike_speed_kmh = biking speed (default = 15.0 Km/h) 
+sld_osm_style_path = 
 [poi]
 poi_category_osm = all | one of the category in `poi_category_osm_tag.json`
 poi_category_custom_name = comma-separated list, names are lowercased and spaces removed
@@ -84,18 +85,15 @@ The script automatically saves the hexagonal grid to the working grid folder, na
 
 ### 2. Hexagonal Grid Generation
 
-- The area of interest is divided into **hexagons** with a default hex_diameter_m of 250 m (hex_radius_m = 125 m), generated only where OSM street nodes exist.
+- The area of interest is divided into **hexagons** with a default hex_diameter_m (hex_radius_m = 125 m), generated only where OSM street nodes exist.
 ---
 
 ### 3. Proximity Index Calculation
 
 For each hexagon:
 
-1. Travel times to the nearest PoI in each category are calculated; the model uses network-based accessibility calculations implemented through the **Pandana library** to find the nearest POI for each location. 
-2. Only streets accessible by the chosen mode (foot or bike) are considered.
-3. The default walking time used is **5 km/h**.
-4. The default biking time used is **15 km/h**.
-5. Travel times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean travel time across categories) and **overall_max** (maximum travel time among categories).
+1. walking times to the nearest PoI in each category are calculated; the model uses the **Pandana library** to find the nearest POI for each location. 
+2. walking times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean walking time across categories) and **overall_max** (maximum walking time among categories).
 
 ---
 
@@ -114,7 +112,7 @@ Each park is assigned access points, classified into three types depending on th
 ---
 
 ## **Outputs:**
-The output is a hexagon vector layer (clipped if a clipping polygon is provided) in EPSG:3857. Both formats include travel times for each service category, the average travel time, and the overall_max index:
+The output is a hexagon vector layer (clipped if a clipping polygon is provided) in EPSG:3857. Both formats include walking times for each service category, the average walking time, and the overall_max index:
 - **CSV**
 - **GPKG file**
 ---
@@ -150,8 +148,8 @@ MINIO_ENDPOINT_URL – URL of the MinIO endpoint
 
  Command line or IDE:
 
-```ini
-.../python3 main_15min.py ./config/parameters.ini > log.txt 2>&1 &
+```
+main_15min.py parameters.ini > log.txt 2>&1 &
 ```
 
 It is necessary to specify the correct path of the python instance. This command runs the Python script main_15min.py in the background, redirecting both standard output and error messages to the file log.txt.
@@ -187,17 +185,32 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 - poi_category_custom_name are normalized: spaces removed, converted to lowercase.
 - Every custom category must have one corresponding CSV file, in the same order.
   
+  
+## Publication on Geoserver
+
+If the parameter `sld_osm_style_path` is specified, the publisher automatically handles the publication process.
+
+The tool retrieves the style files and automatically generates a `publish.json` configuration file. This file contains the information required to publish the dataset and its associated style.
+
+Using the json, the publisher automatically publishes the layer to both IDRA and GeoServer.
+
+## Log rotation
+
+All log messages are written to a file (15min_logger.log).
+
+To avoid uncontrolled growth of the log file, log rotation is enabled. When the file reaches a certain size, a new log file is created while a small number of previous logs are kept as backups. 
+
+Each log entry records the timestamp, the severity level of the message, and the message itself.
+
 ## Otput Folder Structure
 
 Output directory is created at output_local_path. Inside it:
 
 - **grid**: contains the **grid_parameter.csv** and the **grid.gpkg**
   
-- **walkability_all.csv**: if poi_category_osm = 'all' **or** more than one poi_category_custom_name is specified
+- **<filename>.csv**
 
-- **walkability_<category>.csv**: if a specific poi_category_osm or poi_category_custom_name is selected (e.g., walkability_education.csv)
-
-- **walkability_<category>_<filename>.gpkg** or **walkability_all_<filename>.gpkg**
+- **<filename>.gpkg** 
 
 -  **osm_pois/**: contains one CSV for each osm category
 
@@ -242,8 +255,8 @@ After executing the script, the following structure will be created:
 Output directory (output_path = parent_path/{...}):
 
 output_path/
-├── walkability_<category>_<filename>.csv 	   
-├── walkability_<category>_<filename>.gpkg
+├── <filename>.csv 	   
+├── <filename>.gpkg
 ├── grid/
 │   ├── grid_parameter.csv
 │   ├── grid.gpkg
@@ -285,7 +298,7 @@ o	Bounding box preparation
 
 o	Data download: Downloads street networks and Points of Interest (PoIs), filtered by mode of transport (walking or biking) and category. 
 
-o	Proximity computation: Calls computo to calculate travel times to PoIs for each hexagonal tile and computes the proximity index.
+o	Proximity computation: Calls computo to calculate walking times to PoIs for each hexagonal tile and computes the proximity index.
 
 o	Output saving.
 
