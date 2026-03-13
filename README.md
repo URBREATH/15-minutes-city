@@ -315,3 +315,7 @@ Provides functions for reading input parameters from .ini file.
 5.	**errors.py**
 
 Error handler module that defines error codes.
+
+5.	**logger.py**
+
+Log rotation.
