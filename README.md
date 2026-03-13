@@ -3,7 +3,7 @@ Open-source tool for 15-minute city analysis.
 
 ## Overview and Purpose
 
-The **15-Minute City algorithm** is designed to assign a proximity index to urban services within a defined geographic area. It evaluates how easily residents can access Points of Interest (PoIs) on foot or by bicycle, following the “15-minute city” concept introduced by **Carlos Moreno**.  
+The **15-Minute City tool** is designed to assign a proximity index to urban services within a defined geographic area. It evaluates how easily residents can access Points of Interest (PoIs) on foot or by bicycle, following the “15-minute city” concept introduced by **Carlos Moreno**.  
 This urban planning model envisions that most daily needs should be met within a 15-minute walk or bike ride from home.
 
 ---
@@ -12,7 +12,7 @@ This urban planning model envisions that most daily needs should be met within a
 
 - The tool uses **OpenStreetMap (OSM)** for the road network, while **POIs** can come from either **OSM** or **custom data** sources.
 - The tool calculates walking or biking time to **POIs**.
-- **OSM POIs** are defined in the `poi_category_osm_tag.json` file, which contains the preconfigured POI categories. Each key in the JSON represents a category and maps to OSM tags and their possible values, which can be modified or extended. Below are the 9 preconfigured categories:
+- **OSM POIs** are defined in the `poi_category_osm_tag.json` file, which contains the preconfigured POI categories. Each key in the JSON represents a category and maps to OSM tags and their possible values, which can be modified or extended. New categories can be added. Below are the 9 preconfigured categories:
 
 | poi_category_osm | description               |
 |------------------|---------------------------|
@@ -190,17 +190,16 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 
 If the parameter `sld_osm_style_path` is specified, the publisher automatically handles the publication process.
 
-The tool retrieves the style files and automatically generates a `publish.json` configuration file. This file contains the information required to publish the dataset and its associated style.
+The tool retrieves the style files and automatically generates a `publish.json` configuration file. This file contains the information required to publish the result and its associated style to both IDRA and GeoServer.
 
-Using the json, the publisher automatically publishes the layer to both IDRA and GeoServer.
 
 ## Log rotation
 
-All log messages are written to a file (15min_logger.log).
 
-To avoid uncontrolled growth of the log file, log rotation is enabled. When the file reaches a certain size, a new log file is created while a small number of previous logs are kept as backups. 
+All messages are written to `15min_logger.log`, with log rotation enabled. When the file reaches a defined size, a new log file is created and a small number of previous logs are kept as backups.
 
-Each log entry records the timestamp, the severity level of the message, and the message itself.
+Each entry includes the timestamp, log level, and message. The logger is configured once and reused across the application, replacing standard `print` statements to record the workflow.
+
 
 ## Otput Folder Structure
 
