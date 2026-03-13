@@ -230,6 +230,7 @@ Output directory is created at output_local_path. Inside it:
 │   ├── index_processing.py             
 │   ├── parameters.py      
 │   ├── park_gates.py
+│   ├── logger.py
 ├── boundary.gpkg                        
 ├── main_15min.py                       
 
@@ -248,6 +249,7 @@ After executing the script, the following structure will be created:
 │   ├── index_processing.py 
 │   ├── parameters.py      
 │   ├── park_gates.py
+│   ├── logger.py
 ├── boundary.gpkg                        
 ├── main_15min.py                        
 
@@ -255,8 +257,8 @@ After executing the script, the following structure will be created:
 Output directory (output_path = parent_path/{...}):
 
 output_path/
-├── <filename>.csv 	   
-├── <filename>.gpkg
+├── `<filename>.csv`   
+├── `<filename>.gpkg`
 ├── grid/
 │   ├── grid_parameter.csv
 │   ├── grid.gpkg
