@@ -3,7 +3,7 @@ from logging.handlers import RotatingFileHandler
 import os
 
 # === Percorso del log ===
-LOG_PATH = "/home/script-3-30-300/script_work_chiara/city15_simulation/15min_logger.log"
+LOG_PATH = "15min_logger.log"
 os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
 
 # === Logger globale ===
