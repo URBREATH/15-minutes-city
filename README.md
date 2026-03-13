@@ -92,8 +92,8 @@ The script automatically saves the hexagonal grid to the working grid folder, na
 
 For each hexagon:
 
-1. walking times to the nearest PoI in each category are calculated; the model uses the **Pandana library** to find the nearest POI for each location. 
-2. walking times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean walking time across categories) and **overall_max** (maximum walking time among categories).
+1. Walking times to the nearest PoI in each category are calculated; the model uses the **Pandana library** to find the nearest POI for each location. 
+2. Walking times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean walking time across categories) and **overall_max** (maximum walking time among categories).
 
 ---
 
