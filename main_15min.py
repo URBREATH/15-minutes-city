@@ -100,7 +100,7 @@ def validate_parameters(parameters_file):
     poi_category_custom_csv = poi_parameters.get('poi_category_custom_csv')
 
 
-    with open("/home/script-3-30-300/script_work_chiara/city15_simulation/config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
+    with open("/config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
             
     # Valid OSM categories
