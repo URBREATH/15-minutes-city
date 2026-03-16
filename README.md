@@ -42,11 +42,11 @@ weight = time | distance
 mode = walk | bike
 walk_speed_kmh =  walking speed (default = 5.0 Km/h)  
 bike_speed_kmh = biking speed (default = 15.0 Km/h) 
-sld_osm_style_path = path to the style for geoserver publication
 [poi]
 poi_category_osm = all | one of the category in `poi_category_osm_tag.json`
 poi_category_custom_name = comma-separated list, names are lowercased and spaces removed
 poi_category_custom_csv = full CSV paths (comma-separated) with required columns: id, lat, lon in EPSG:4326.
+poi_category_custom_style = path to the custom sld for geoserver publication
 [park]
 park_gates_source = osm | csv | road_intersect | virtual (default = osm)
 park_gates_osm_buffer_m =  OSM park-gate buffer distance in meters (default 10.0)
