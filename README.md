@@ -61,7 +61,7 @@ clip_layer = full path to a GPKG polygon file in EPSG:3857 used to clip the area
 
 **Minimum required parameters: aoi_bbox, execution_filename, execution_output_local_path**; default (poi_category_osm = ‘all’). The filename identifies the area of interest and is used as the output name for both the CSV and GPKG files.
 
-A separate `parameters_<city>.ini` file is created for each city that requires computation, stored in the parameter folder.
+A separate `parameters_<city>.ini` file is created for each city that requires computation, stored in the parameters folder.
 
 The script automatically saves the hexagonal grid to the working grid folder, naming it grid.gpkg. The script also allows the use of an external grid, if provided via the `grid_gpkg` parameter.
 
