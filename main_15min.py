@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import json
 import warnings
+import traceback
 
 from scripts.errors import raise_error
 from scripts.index_processing import create_bbox, download, computo
@@ -15,7 +16,6 @@ from scripts.logger import logger
 
 
 warnings.filterwarnings("ignore")
-
 
 # ------------------------------------------------
 # UTILITY FUNCTIONS
@@ -98,9 +98,9 @@ def validate_parameters(parameters_file):
     poi_category_osm = poi_parameters.get('poi_category_osm') 
     poi_category_custom_name = poi_parameters.get('poi_category_custom_name')
     poi_category_custom_csv = poi_parameters.get('poi_category_custom_csv')
+    poi_category_custom_style = poi_parameters.get('poi_category_custom_style')
 
-
-    with open("/config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
+    with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
             
     # Valid OSM categories
@@ -114,6 +114,8 @@ def validate_parameters(parameters_file):
     # Validate custom POI
     custom_names = ["".join(x.lower().split()) for x in poi_category_custom_name.split(",")] if poi_category_custom_name else []
     custom_csvs = [x.strip() for x in poi_category_custom_csv.split(",")] if poi_category_custom_csv else []
+    custom_styles = [x.strip() for x in poi_category_custom_style.split(",")] if poi_category_custom_style else []
+
 
     conflicting_custom = [name for name in custom_names if name in valid_poi_category_osm]
     if conflicting_custom:
@@ -124,7 +126,24 @@ def validate_parameters(parameters_file):
     
     if custom_names or custom_csvs:
         if len(custom_names) != len(custom_csvs):
-            raise_error("ERR_009", extra ="custom categories count must match CSV categories counth")
+            raise_error("ERR_009", extra ="custom categories count must match CSV categories count")
+
+    # --- STYLE CONTROLS ---
+    
+    if custom_styles:
+        # must have at least one csv
+        if not custom_csvs:
+            raise_error("ERR_010")
+    
+        # styles cannot exceed csv count
+        if len(custom_styles) > len(custom_csvs):
+            raise_error("ERR_011")
+    
+        # each style must exist
+        for s in custom_styles:
+            if not os.path.isfile(s):
+                raise_error("ERR_012", extra=s)
+                
        
     # ---------------- PARK ----------------                                                                             
 
@@ -135,7 +154,7 @@ def validate_parameters(parameters_file):
     park_source = park_parameters.get('park_gates_source') or 'osm'
     valid_park_source = ["osm", "csv", "road_intersect", "virtual"]
     if park_source not in valid_park_source:
-        raise_error("ERR_010", extra=f"{'| '.join(valid_park_source)}")
+        raise_error("ERR_013", extra=f"{'| '.join(valid_park_source)}")
 
 
     park_csv = park_parameters.get('park_gates_csv', '').strip()
@@ -143,15 +162,15 @@ def validate_parameters(parameters_file):
     if park_source == "csv":
 
         if not park_csv:
-            raise_error("ERR_011", extra=park_csv)
+            raise_error("ERR_014", extra=park_csv)
         
         if not os.path.isfile(park_csv):
-            raise_error("ERR_011", extra=park_csv)
+            raise_error("ERR_014", extra=park_csv)
     
     if custom_names or custom_csvs:
         for f in custom_csvs:
             if not os.path.exists(f):
-                raise_error("ERR_012", extra=f)
+                raise_error("ERR_015", extra=f)
 
     try:
         grid_parameters = read_param(parameters_file, 'grid')
@@ -160,11 +179,11 @@ def validate_parameters(parameters_file):
 
     clip_layer = grid_parameters.get('clip_layer')
     if clip_layer and not os.path.exists(clip_layer):
-        raise_error("ERR_013", extra=clip_layer)
+        raise_error("ERR_016", extra=clip_layer)
         
     grid_gpkg = grid_parameters.get('grid_gpkg')
     if grid_gpkg and not os.path.exists(grid_gpkg):
-        raise_error("ERR_014", extra=grid_gpkg)                                                  
+        raise_error("ERR_017", extra=grid_gpkg)                                                  
 
     return {
         "aoi": aoi_parameters,
@@ -213,10 +232,18 @@ def run_analysis(params: dict):
 
     poi_category_osm = poi.get('poi_category_osm') or ('all' if not poi.get('poi_category_custom_name') else None)
 
-    bbox = eval(aoi['bbox'])
+    bbox = aoi['bbox']
+
+    if isinstance(bbox, str):
+        # stringa → da CLI / INI
+        bbox = eval(bbox)
+    else:
+        # già lista → da API
+        bbox = bbox
+
 
     effective_params = {
-        "bbox": eval(aoi['bbox']),
+        "bbox": aoi['bbox'],
         "output_local_path": execution.get('output_local_path'),
         "output_minio_path": new_path_output_minio_path,  
     
@@ -314,7 +341,7 @@ def run_analysis(params: dict):
         access_key,
         secret_key,
         endpoint_url,
-        execution.get('sld_osm_style_path'),
+        execution.get('poi_category_custom_style'),
         new_path_output_minio_path,
         execution.get('bike_speed_kmh') or 15.0,
         execution.get('walk_speed_kmh') or 5.0,
@@ -359,6 +386,8 @@ if __name__ == '__main__':
         run_analysis(params)
 
     except Exception as e:
-        logger.error("ERROR: Script execution not started.")
-        print("ERROR: Script execution not started.", e)
+        logger.error("ERROR: Script execution failed")
+        logger.error(str(e))
+        logger.error(traceback.format_exc())
+        print("ERROR:", e)
         sys.exit(1)
