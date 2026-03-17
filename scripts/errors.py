@@ -26,10 +26,10 @@ ERRORS = {
     "ERR_011": "More styles than csv categories",
     "ERR_012": "poi_category_custom_style not found",    
     "ERR_013": "Invalid parameter value park_gates_source",
-    "ERR_014": "park_gates_csv_path missing or invalid",
+    "ERR_014": "park_gates_csv missing or invalid",
     "ERR_015": "poi_category_custom_csv not found",
-    "ERR_016": "clip_layer_path not found",
-    "ERR_017": "grid_path not found"    
+    "ERR_016": "clip_layer not found",
+    "ERR_017": "grid_gpkg not found"    
 }
 
 
