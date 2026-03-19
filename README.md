@@ -149,11 +149,8 @@ MINIO_ENDPOINT_URL – URL of the MinIO endpoint
  Command line or IDE:
 
 ```
-main_15min.py parameters.ini > log.txt 2>&1 &
+main_15min.py parameters.ini
 ```
-
-It is necessary to specify the correct path of the python instance. This command runs the Python script main_15min.py in the background, redirecting both standard output and error messages to the file log.txt.
-
 ---
 
 ## Possible Errors
