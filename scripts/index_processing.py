@@ -1126,37 +1126,57 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         hexag = hexag[['geometry'] + ['minutes_{}'.format(cat) for cat in categories] + ['countNaN']]
         
         #Calcolo indice continuo (da 0 a 100)
-        hexag['overall_average'] = None
         
-           
-        for i in hexag.index:
-            valori = []
-            val100 = []
-            num_valori = 0
-
-            for j in range(0, len(categories)):
-                val = hexag.at[i,'minutes_{}'.format(categories[j])]
-                
-                if np.isnan(val):
-                    valori.append(None)
-                else:
-
-                    valori.append(val)
-                    num_valori = len(valori)
-                   
-                val100.append(decay(val))
-            pd.set_option('display.max_columns', None)
+        if len(categories) > 1:
             
-            if hexag.at[i, 'countNaN'] == len(categories):  # All values are nan
-                hexag.at[i, 'overall_average'] = None
-            else:
-                
-                if num_valori > 0:  
+            hexag['overall_average'] = None
+            
+            
+            for i in hexag.index:
+                valori = []
+                val100 = []
+                num_valori = 0
+    
+                for j in range(0, len(categories)):
+                    val = hexag.at[i,'minutes_{}'.format(categories[j])]
                     
-                    hexag.at[i, 'overall_average'] = sum(filter(None, valori)) / num_valori  # Calculate the overall_average
+                    if np.isnan(val):
+                        valori.append(None)
+                    else:
+    
+                        valori.append(val)
+                        num_valori = len(valori)
+                    
+                    val100.append(decay(val))
+                pd.set_option('display.max_columns', None)
+                
+                if hexag.at[i, 'countNaN'] == len(categories):  # All values are nan
+                    hexag.at[i, 'overall_average'] = None
                 else:
-      
-                    hexag.at[i, 'overall_average'] = None  
+                    
+                    if num_valori > 0:  
+                        
+                        hexag.at[i, 'overall_average'] = sum(filter(None, valori)) / num_valori  # Calculate the overall_average
+                    else:
+        
+                        hexag.at[i, 'overall_average'] = None  
+
+
+            def overall_max(row, minutes_cols):
+                values = row[minutes_cols]
+            
+                # Se esiste almeno un NaN → significa "> 60"
+                if values.isnull().any():
+                    return '>60'
+            
+                max_val = values.max()
+            
+                if max_val > 60:
+                    return '>60'
+            
+                return round(max_val, 2)
+        
+            hexag['overall_max'] = hexag.apply(lambda r: overall_max(r, minutes_cols), axis=1)
         
         pd.set_option('display.max_columns', None)
         pd.set_option("display.max_rows", None)        
@@ -1172,21 +1192,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         # Trasforma le colonne minuti in numerico; tutti gli errori diventano NaN
 
         
-        def overall_max(row, minutes_cols):
-            values = row[minutes_cols]
-        
-            # Se esiste almeno un NaN → significa "> 60"
-            if values.isnull().any():
-                return '>60'
-        
-            max_val = values.max()
-        
-            if max_val > 60:
-                return '>60'
-        
-            return round(max_val, 2)
-        
-        hexag['overall_max'] = hexag.apply(lambda r: overall_max(r, minutes_cols), axis=1)
+
         #hexag['overall_max'] = hexag['overall_max'].fillna('> 60')
         #hexag['overall_max'] = '> 60'
         #for i in hexag.index:
@@ -1217,11 +1223,10 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         columns=lambda c: c.replace('minutes_', '') if c.startswith('minutes_') else c,
         inplace=True
         )
-        cols_to_keep = (
-        ['geometry']
-        + categories
-        + ['overall_average', 'overall_max']
-        )
+        cols_to_keep = ['geometry'] + categories
+        
+        if len(categories) > 1:
+            cols_to_keep += ['overall_average', 'overall_max']
         
         # Se clip layer è fornito e valido
         if clip_layer and os.path.isfile(clip_layer):
@@ -1255,8 +1260,9 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             
             get_folder("style", output_minio_path,access_key, secret_key, endpoint_url)
             parts = output_minio_path.split("/", 1)[1]
-            categories.append("overall_average")
-            categories.append("overall_max")
+            if len(categories) > 1:
+                categories.append("overall_average")
+                categories.append("overall_max")
             publish_data = {
                     "analysis": "15min",
                     "data": []
@@ -1280,7 +1286,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
                     "store_name": f"{filename}_{style_name}",
                     "data_path": f"{parts}/{style_name}.gpkg",
                     "style_name": f"{style_name}",
-                    "sld_path": f"{parts}/style/{poi_category_custom_style}",
+                    "sld_path": f"{poi_category_custom_style}",
                     "write_on_catalogue": True,
                     "description": "15min analysis"
                 })
