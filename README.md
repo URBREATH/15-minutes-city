@@ -186,7 +186,7 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 - Every custom category must have one corresponding CSV file, in the same order.
   
   
-## Publication on Geoserver
+## Publication on Geoserver 
 
 The tool supports automatic publication to GeoServer and IDRA if output_minio_path is specified.
 
@@ -203,10 +203,10 @@ This parameter accepts a list of .sld paths, one for each custom category that r
 
 All messages are written to `15min_logger.log`, in the `log` folder, with log rotation enabled. When the file reaches a defined size, a new log file is created and a small number of previous logs are kept as backups.
 
-Each entry includes the timestamp, log level, and message. The logger is configured once and reused across the application, replacing standard `print` statements to record the workflow.
+Each entry includes the timestamp, log level, and message. The logger is configured once and reused across the application, replacing standard `print` statements to record the workflow. The logger is configured with a maximum file size of 10 MB and retains up to 3 backup log files.
 
 
-## Otput Folder Structure
+## Output Folder Structure
 
 Output directory is created at output_local_path. Inside it:
 
@@ -334,6 +334,6 @@ Provides functions for reading input parameters from .ini file.
 
 Error handler module that defines error codes.
 
-5.	**logger.py**
+6.	**logger.py**
 
 Log rotation.
