@@ -56,7 +56,7 @@ clip_layer = full path to a GPKG polygon file in EPSG:3857 used to clip the area
 virtual_nodes = true/false
 ```
 
-**Minimum required parameters: area of interest and the path folder and the filename**; default (poi_category_osm = ‘all’). The filename identifies the area of interest and is used as the output name for both the CSV and GPKG files.
+**Minimum required parameters: area of interest and the path folder/filename**; default (poi_category_osm = ‘all’). The filename identifies the area of interest and is used as the output name for both the CSV and GPKG files.
 
 A separate `parameters_<city>.ini` file is created for each city that requires computation, stored in the parameters folder.
 
@@ -115,12 +115,11 @@ The output is a hexagon vector layer (clipped if a clipping polygon is provided)
 
 **Programming Language:** Python
 
-**Qgis:** 
-The algorithm uses **QGIS in offscreen mode** to perform all geospatial computations.  
-Initialization includes:
+**Qgis:** The algorithm uses **QGIS in offscreen mode** to perform all geospatial computations.  Initialization includes:
+
 - Importing QGIS and Python libraries  
 - Initializing the QGIS application and Processing framework
-- 
+
 **Libraries:** Pandana
 
 ### 2. Execution
