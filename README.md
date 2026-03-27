@@ -1,7 +1,4 @@
 # 15-minutes-city 
-Open-source tool for 15-minute city analysis.
-
-## Overview and Purpose
 
 The **15-Minute City tool** is designed to assign a proximity index to urban services within a defined geographic area. It evaluates how easily residents can access Points of Interest (PoIs) on foot or by bicycle, following the “15-minute city” concept introduced by **Carlos Moreno**.  
 This urban planning model envisions that most daily needs should be met within a 15-minute walk or bike ride from home.
@@ -56,44 +53,39 @@ park_gates_virtual_distance_m = distance in meters for virtual park gate generat
 grid_gpkg = full path to a GPKG external grid file in EPSG:3857 
 hex_diameter_m =  diameter (meters) of the hexagons of the hexagonal grid (default = 250.0)
 clip_layer = full path to a GPKG polygon file in EPSG:3857 used to clip the area of interest 
-
+virtual_nodes = true/false
 ```
 
-**Minimum required parameters: aoi_bbox, execution_filename, execution_output_local_path**; default (poi_category_osm = ‘all’). The filename identifies the area of interest and is used as the output name for both the CSV and GPKG files.
+**Minimum required parameters: area of interest and the path folder and the filename**; default (poi_category_osm = ‘all’). The filename identifies the area of interest and is used as the output name for both the CSV and GPKG files.
 
 A separate `parameters_<city>.ini` file is created for each city that requires computation, stored in the parameters folder.
 
 The script automatically saves the hexagonal grid to the working grid folder, naming it grid.gpkg. The script also allows the use of an external grid, if provided via the `grid_gpkg` parameter.
-
+ 
 ---
   
 ## Algorithm Workflow
 
-### 1. Data Download
+### 1. OSM Data Download
 
-1. The street network is downloaded from OSM through the **Pandana library**, limited to pedestrian or bicycle-accessible streets. If a network file already exists in the output_local_path folder, it is reused and not downloaded again.The same logic is applied to POIs.
+- The street network is downloaded from OSM through the **Pandana library**, limited to pedestrian or bicycle-accessible streets. If a network file already exists in the output_local_path folder, it is reused and not downloaded again.The same logic is applied to POIs.
 
-2. Grid parameters are computed and stored in a CSV file (grid_parameters.csv), including the area extent and the hex_radius_m, defined as hex_diameter_m / 2.
-
-3. Points of Interest (PoIs) are processed according to the selected source:
-
-	- for OSM categories, data are downloaded only if the corresponding category CSV is not already present;
-
-	- for custom categories, the provided CSV files are copied into the custom_poi folder if not already present;
+- Points of Interest (POIs) are handled as follows: OSM category data is downloaded only if the corresponding CSV is missing, while custom category CSVs are copied into the custom_poi folder if not already present.
 
 ---
 
 ### 2. Hexagonal Grid Generation
 
-- The area of interest is divided into **hexagons** with a default hex_diameter_m (hex_radius_m = 125 m), generated only where OSM street nodes exist.
+The area of interest is divided into **hexagons** with a default hex_diameter_m (125 m), generated only where OSM street nodes exist. Grid parameters are computed and stored in a CSV file (grid_parameters.csv), including the area extent and the hex_radius_m, defined as hex_diameter_m / 2. If virtual_nodes = true, a virtual node is placed at each hexagon centroid, and a connecting edge is added to the nearest OSM street node, extending the network to ensure full hexagon coverage.
+
 ---
 
 ### 3. Proximity Index Calculation
 
 For each hexagon:
 
-1. Walking times to the nearest PoI in each category are calculated; the model uses the **Pandana library** to find the nearest POI for each location. 
-2. Walking times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean walking time across categories) and **overall_max** (maximum walking time among categories).
+- Walking times to the nearest PoI in each category are calculated; the model uses the **Pandana library** to find the nearest POI for each location. 
+- Walking times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean walking time across categories) and **overall_max** (maximum walking time among categories).
 
 ---
 
@@ -112,9 +104,9 @@ Each park is assigned access points, classified into three types depending on th
 ---
 
 ## **Outputs:**
-The output is a hexagon vector layer (clipped if a clipping polygon is provided) in EPSG:3857. Both formats include walking times for each service category, the average walking time, and the overall_max index:
-- **CSV**
-- **GPKG file**
+
+The output is a hexagon vector layer (clipped if a clipping polygon is provided) available in CSV and GPKG formats. Both formats include walking times for each service category, the average walking time, and the overall_max index.
+
 ---
 
 ##  Technical Architecture
@@ -123,20 +115,15 @@ The output is a hexagon vector layer (clipped if a clipping polygon is provided)
 
 **Programming Language:** Python
 
-**Qgis:** install qgis
-
-**Libraries:**
-Pandana, geopandas, numpy, pandas, osmnet, rtree, pyproj, shapely,
-geovoronoi, fiona=1.9.5, rasterio, gdal, scipy, beautifulsoup, from qgis.core import *
-
-### 2. QGIS Headless Implementation
-
+**Qgis:** 
 The algorithm uses **QGIS in offscreen mode** to perform all geospatial computations.  
 Initialization includes:
 - Importing QGIS and Python libraries  
 - Initializing the QGIS application and Processing framework
+- 
+**Libraries:** Pandana
 
-### 3. Execution
+### 2. Execution
 
 Set the following environment variables only when running the script with direct MinIO publishing. Not required for local execution.
 
@@ -146,7 +133,7 @@ MINIO_SECRET_KEY   – Secret key associated with the access key
 MINIO_ENDPOINT_URL – URL of the MinIO endpoint
 ```
 
- Command line or IDE:
+ Command for launch:
 
 ```
 main_15min.py parameters.ini
@@ -179,12 +166,7 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 | `ERR_015`  | poi_category_custom_csv not found `<poi_category_custom_csv>` |
 | `ERR_016`  | clip_layer not found `<clip_layer>` |
 | `ERR_017`  | grid_gpkg not found `<grid_gpkg>` |
-
  
-- Parameter poi_category_custom_name cannot be identical to any existing OSM category (poi_category_osm).
-- poi_category_custom_name are normalized: spaces removed, converted to lowercase.
-- Every custom category must have one corresponding CSV file, in the same order.
-  
   
 ## Publication on Geoserver 
 
@@ -192,18 +174,14 @@ The tool supports automatic publication to GeoServer and IDRA if output_minio_pa
 
 A publish.json file is always generated by default, containing all the required information to publish the output layers and their associated styles.
 
-The `style` folder already includes .sld files for the 9 standard OSM categories.
-
-If custom POI categories (CSV) are provided and a specific style is required, custom .sld files can be specified using the poi_category_custom_style parameter.
-
-This parameter accepts a list of .sld paths, one for each custom category that requires a custom style.
+For OSM categories, the .sld files located in the `style` folder are used, while for POI categories, custom .sld files can be provided using the poi_category_custom_style parameter.
 
 
 ## Log rotation
 
-All messages are written to `15min_logger.log`, in the `log` folder, with log rotation enabled. When the file reaches a defined size, a new log file is created and a small number of previous logs are kept as backups.
+All messages are written to `15min_logger.log` in the `log` folder, with size-based log rotation enabled via a RotatingFileHandler. When the file reaches the configured maximum size (10 MB), a rollover occurs and a new log file is created.
 
-Each entry includes the timestamp, log level, and message. The logger is configured once and reused across the application, replacing standard `print` statements to record the workflow. The logger is configured with a maximum file size of 10 MB and retains up to 3 backup log files.
+A maximum of three rotated log files are retained (backupCount=3), with older files automatically discarded.
 
 
 ## Output Folder Structure
@@ -216,67 +194,19 @@ Output directory is created at output_local_path. Inside it:
   
 - **`<filename>.gpkg`**
 
-- **_publish.json** (if output_minio_path is specified)
+- **_publish.json** (JSON for automatic publication on Geosever)
 
--  **osm_pois/**: contains one CSV for each osm category
+-  **osm_pois**: contains one CSV for each osm category
 
-- **custom_pois/**: contains CSV files for custom categories.
+- **custom_pois**: contains CSV files for custom categories.
 
-- **osm_network/**: contains: nodes.csv and edges.csv
-
-```
-
-├── config/
-│   ├── parameters.ini                   
-│   ├── poi_category_osm_tag.json
-│   ├── park_road_network_osm_tag.json
-│   ├── park_gate_osm_tag.json   
-├── scripts/
-│   ├── errors.py                        
-│   ├── index_processing.py             
-│   ├── parameters.py      
-│   ├── park_gates.py
-│   ├── logger.py
-├── style/
-│   ├── shop.sld
-│   ├── ...
-├── log/
-│   ├── 15min_logger.log
-├── boundary.gpkg                        
-├── main_15min.py
-                 
-
+- **osm_network**: contains: nodes.csv and edges.csv
 
 ```
-After executing the script, the following structure will be created:  
-```
-
-├── config/
-│   ├── parameters.ini                   
-│   ├── poi_category_osm_tag.json
-│   ├── park_road_network_osm_tag.json
-│   ├── park_gate_osm_tag.json         
-├── scripts/
-│   ├── errors.py                        
-│   ├── index_processing.py 
-│   ├── parameters.py      
-│   ├── park_gates.py
-│   ├── logger.py
-├── style/
-│   ├── shop.sld
-│   ├── ...
-├── log/
-│   ├── 15min_logger.log
-├── boundary.gpkg                        
-├── main_15min.py                        
-
-
-Output directory (output_local_path = parent_path/{...}):
-
 output_local_path/
 ├── <filename>.csv   
 ├── <filename>.gpkg
-├── _publish.json
+├── _publish.json 
 ├── grid/
 │   ├── grid_parameter.csv
 │   ├── grid.gpkg
@@ -298,42 +228,16 @@ output_local_path/
 ---
 
 
-## Main Scripts
+## Scripts
 
-1.	**main_15min.py**
+1.	**main_15min.py:** handles parameters from a .ini, executes steps via index_processing.py functions, and logs progress and timing.
 
-This is the main workflow script for the 15-MinutesIndex. Its main responsibilities are:
+2.	**index_processing.py:** contains functions for bounding box preparation, data download (street networks and POIs by transport mode and category), proximity computation, and output saving.
 
-o	Parameter handling: Reads configuration from a .ini.
+3.	**park_gates.py:** manages gates for “park” category.
 
-o	Perform each step by calling the functions contained in index_processing.py.
+4.	**parameters.py:** provides functions for reading input parameters from .ini file.
 
-o	Logging and timing: Prints progress and timing for each step.
+5.	**errors.py:** error handler module that defines error codes.
 
-2.	**index_processing.py**
-
-Contains helper functions used by main_15min.py:
-
-o	Bounding box preparation
-
-o	Data download: Downloads street networks and Points of Interest (PoIs), filtered by mode of transport (walking or biking) and category. 
-
-o	Proximity computation: Calls computo to calculate walking times to PoIs for each hexagonal tile and computes the proximity index.
-
-o	Output saving.
-
-3.	**park_gates.py**
-
-Manages gates for “park” category.
-
-4.	**parameters.py**
-
-Provides functions for reading input parameters from .ini file.
-
-5.	**errors.py**
-
-Error handler module that defines error codes.
-
-6.	**logger.py**
-
-Log rotation.
+6.	**logger.py:** log rotation.
