@@ -1,6 +1,7 @@
 #IMPORT
 #---------------
 import geopandas
+from scipy.spatial import cKDTree
 import numpy as np
 import pandas as pd
 import pandana
@@ -776,11 +777,6 @@ def download_network_osm(bbox_tassello, output_path_bbox,access_key, secret_key,
           
         result_get_network, gdf_nodes, gdf_edges = get_network_osm(bbox_tassello, output_path_bbox)
                      
-        if  result_get_network == 1:
-            logger.info('Problem in recovering the road network.\n')
-            np.savetxt("{}/osm_network/nodes.csv".format(output_path_bbox), ['id,x,y'], delimiter=';', fmt='%s')
-            np.savetxt("{}/osm_network/edges.csv".format(output_path_bbox), ['u,v,length,time'], delimiter=';', fmt='%s')
-            return 0
         tassello_nome = os.path.basename(output_path_bbox)
         index = tassello_nome.replace('tassello', '') 
         demPath = f'{output_path_bbox}/merged_dem_{index}.tif'
@@ -790,6 +786,7 @@ def download_network_osm(bbox_tassello, output_path_bbox,access_key, secret_key,
            result, gdf_edges  = calculate_edges_time_from_nodes(gdf_edges,  mode = 'walk')
 
         #Salvo il file nodes
+        gdf_nodes['type'] = 'osm'
         gdf_nodes.to_csv("{}/osm_network/nodes.csv".format(output_path_bbox), index = False)     
         #Salvo il file edges
         columns_to_save = ["u", "v", "length", "time"]
@@ -879,7 +876,7 @@ def calculate_edges_time_from_nodes(gdf_edges, mode = 'walk'):
 # WALK SCORE FUNCTION
 
 
-def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_speed_kmh, mode = 'walk',weight='time'):
+def walkScore_min(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_speed_kmh, mode = 'walk',weight='time'):
 
         
     if weight == 'time':
@@ -892,10 +889,14 @@ def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_sp
         else:
             DISTMAX_BIKE = (bike_speed_kmh / 3.6) * (TEMPOMAX * 60) #meters            
             velocita = (bike_speed_kmh / 3.6)
-            peso = DISTMAX_BIKE                            
+            peso = DISTMAX_BIKE  
+
+
      
     nodes = pd.read_csv("{}/osm_network/nodes.csv".format(output_path_bbox), index_col=0)
     edges = pd.read_csv("{}/osm_network/edges.csv".format(output_path_bbox), index_col=[0,1])
+    
+   
     edges = edges.reset_index()
     
     if not edges.empty:
@@ -925,7 +926,8 @@ def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_sp
             pois.append(df)
         
         logger.info("POIs categories: %s", list_string)
-         
+
+
         if weight == 'time':
         
             network = pandana.Network(nodes['x'], nodes['y'], edges['u'], edges['v'], edges[['time']], twoway=False)
@@ -933,8 +935,7 @@ def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_sp
             network = pandana.Network(nodes['x'], nodes['y'], edges['u'], edges['v'], edges[['length']], twoway=False)
            
         walk_score = nodes
-        
-        
+
         for i in range(0,len(pois)):
             if not pois[i].empty:
                 network.set_pois(category = list_string[i], maxdist = peso, maxitems = 1, 
@@ -957,7 +958,7 @@ def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_sp
         
 
          
-        logger.info('Function walkScore_minuti completed.\n')
+        logger.info('Function walkScore_min completed.\n')
         
         return 0, walk_score    
 
@@ -971,7 +972,7 @@ def walkScore_minuti(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_sp
 
 
 def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,custom_names,custom_csvs,grid_gpkg,poi_category_osm, clip_layer, filename,access_key,secret_key,endpoint_url,
- poi_category_custom_style,output_minio_path, bike_speed_kmh, walk_speed_kmh,mode = 'walk', weight='time'):
+ poi_category_custom_style,output_minio_path,virtual_nodes, bike_speed_kmh, walk_speed_kmh,mode = 'walk', weight='time'):
             
     bbox = json.loads(bbox_tassello)
     grid_folder = os.path.join(output_path_bbox, "grid")
@@ -1059,8 +1060,8 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             minio_path = os.path.join(output_minio_path, "grid") 
             get_folder(outputPath_grid, minio_path,access_key, secret_key, endpoint_url)
             
-    # Chiamata della funzione walkScore_minuti        
-    result, walk_score = walkScore_minuti(output_path_bbox, poi_category_osm,walk_speed_kmh, bike_speed_kmh, mode, weight)
+    # Chiamata della funzione walkScore_min        
+    result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,walk_speed_kmh, bike_speed_kmh, mode, weight)
     
     if walk_score is None or walk_score.empty:
         ws = []
@@ -1069,7 +1070,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         header = 
         'geometry;overall_average;overall_max', 
         comments='')
-        logger.info('The walkScore_minuti function does not return a ws to work on.')
+        logger.info('The walkScore_min function does not return a ws to work on.')
         if access_key and secret_key and endpoint_url: 
             get_folder(result, output_minio_path,access_key, secret_key, endpoint_url)
         return 0
@@ -1077,37 +1078,65 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         
     
         walk_score = geopandas.GeoDataFrame(walk_score, geometry = geopandas.points_from_xy(walk_score.x, walk_score.y))
-       
-        hexag = geopandas.sjoin(grid, walk_score, how='inner', predicate = 'contains')
-        
-    
-        hexag = hexag.drop(columns=['highway'], errors='ignore')
-        
-        hexag = hexag.replace({'NaN' : np.nan})
-        
-        hexag = hexag.dissolve(by = hexag.index, aggfunc="mean")
+
         
         poi_folder = os.path.join(output_path_bbox, "osm_poi")
         custom_poi_folder = os.path.join(output_path_bbox, "custom_poi")
-
         folders = [poi_folder, custom_poi_folder]
+        
         # legge automaticamente tutti i csv presenti
         csv_files = []
-        
+        categories = []
         # raccoglie tutti i csv dalle cartelle esistenti
         for folder in folders:
             if os.path.isdir(folder):
                 csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
         
         csv_files = sorted(csv_files)
-        
-        categories = []
-        
+                
         for f in csv_files:
             name = os.path.splitext(os.path.basename(f))[0]
             categories.append(name)
         
         logger.info("POIs categories: %s", categories)
+               
+       # Verify empty hexag
+        if virtual_nodes:
+            hexag = geopandas.sjoin(grid, walk_score, how='left', predicate = 'contains')
+
+
+            hexag['missing_categories'] = hexag.apply(
+            lambda row: [cat for cat in categories if pd.isna(row.get(f'minutes_{cat}'))],
+            axis=1
+            )
+
+            # Seleziona solo gli esagoni che hanno almeno una categoria mancante
+            empty_hexag = hexag[hexag['missing_categories'].apply(len) > 0].copy()
+
+            centroids_empty_hexag = empty_hexag.copy()
+            centroids_empty_hexag['geometry'] = centroids_empty_hexag.geometry.centroid
+            
+            attach_centroids_to_network(
+                centroids_empty_hexag,
+                output_path_bbox,
+                mode
+            )
+            
+            # AGAIN            
+            result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,walk_speed_kmh, bike_speed_kmh, mode, weight)
+            walk_score = geopandas.GeoDataFrame(walk_score, geometry = geopandas.points_from_xy(walk_score.x, walk_score.y))  
+
+       
+        hexag = geopandas.sjoin(grid, walk_score, how='inner', predicate = 'contains')
+        
+        
+        hexag = hexag.drop(columns=['highway'], errors='ignore')
+        hexag = hexag.drop(columns=['type'], errors='ignore')
+        
+        hexag = hexag.replace({'NaN' : np.nan})
+        
+        
+        hexag = hexag.dissolve(by = hexag.index, aggfunc="mean")
         
 
         for cat in categories:
@@ -1189,28 +1218,6 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             hexag[col] = hexag[col].round(2)
         
     
-        # Trasforma le colonne minuti in numerico; tutti gli errori diventano NaN
-
-        
-
-        #hexag['overall_max'] = hexag['overall_max'].fillna('> 60')
-        #hexag['overall_max'] = '> 60'
-        #for i in hexag.index:
-        #    if hexag.at[i,'countNaN'] == 0:
-        #
-        #        mins = [
-        #        hexag.at[i, f'minutes_{cat}']
-        #        for cat in categories
-        #        ]
-        #
-        #        if all(val <= 15 for val in mins):
-        #            hexag.at[i,'overall_max'] = 15
-        #        elif any(val > 15 for val in mins) and all(val <=30 for val in mins): 
-        #            hexag.at[i,'overall_max'] = 30
-        #        else:
-        #            hexag.at[i,'overall_max'] = 60
-        #    elif hexag.at[i,'countNaN'] < len(categories):
-        #        hexag.at[i,'overall_max'] = '> 60'
                 
         hexag = hexag.replace({None : np.nan})
         hexag = hexag.to_crs(CRS_3857) 
@@ -1340,5 +1347,134 @@ def upload_on_minio(local_file, filepath, access_key, secret_key,endpoint_url):
     s3.upload_file(local_file, bucket_name, filepath)
 
     logger.info(f"[SUCCESS] Upload on MinIO completed!")
+
+
+
+
+def attach_centroids_to_network(centri, output_path_bbox, mode):
+    
+    # --- 1. Leggi rete ---
+    if mode == 'walk':
+        coefficiente = COEFFICIENT_WALK
+    else:
+        coefficiente = COEFFICIENT_BIKE
+    
+           
+    nodes = pd.read_csv(f"{output_path_bbox}/osm_network/nodes.csv", index_col=0)
+
+    # converti nodes in GeoDataFrame
+    nodes_gdf = geopandas.GeoDataFrame(
+        nodes,
+        geometry=geopandas.points_from_xy(nodes['x'], nodes['y']),
+        crs=CRS_4326
+    )
+    
+    # trasformazione in metri
+    nodes_gdf = nodes_gdf.to_crs(CRS_3857)
+    
+    # aggiorna x e y
+    nodes['x'] = nodes_gdf.geometry.x
+    nodes['y'] = nodes_gdf.geometry.y
+
+    edges = pd.read_csv(f"{output_path_bbox}/osm_network/edges.csv", index_col=[0,1]).reset_index()
+
+    # (deve essere in metri!)
+    centri = centri.to_crs(CRS_3857)
+
+    #np.vstack([...]) → li mette uno sopra l’altro
+    # .T → trasposta    
+    # [[x1, y1],
+    # [x2, y2],
+    # [x3, y3],
+    # ...]
+    
+    # --- 3. KDTree sui nodi ---
+    node_coords = np.vstack([nodes['x'], nodes['y']]).T
+    
+    # organizza questi punti in modo che io possa trovare i vicini velocemente
+    tree = cKDTree(node_coords)
+
+    # --- 4. Coordinate centroidi ---
+    cent_coords = np.vstack([centri.geometry.x, centri.geometry.y]).T
+
+    # per ogni centroide trova il nodo piu vicino
+    # dist = distanza tra centroide e nodo
+    #idx = posizione del nodo più vicino ( nel dataframe)
+    
+    dist, idx = tree.query(cent_coords, k=1)
+    
+    # prende le righe dei nodi trovati
+    #estrae il loro index (node_id reale) 
+
+    nearest_nodes = nodes.iloc[idx].index.values
+
+    # --- 6. Crea nuovi nodi: prende i centroidi degli esagoni ---
+    new_nodes = pd.DataFrame({
+        'x': centri.geometry.x,
+        'y': centri.geometry.y
+    })
+    
+    # Trova l’ID più alto tra i nodi esistenti
+    max_node_id = nodes.index.max()
+    # Assegna ID nuovi ai centroidi
+    new_nodes.index = range(max_node_id + 1, max_node_id + 1 + len(new_nodes))
+    new_nodes['type'] = 'virtual'
+    
+    # --- 7. Crea archi: centroide → nodo OSM più vicino ---
+    new_edges = pd.DataFrame({
+        'u': new_nodes.index,
+        'v': nearest_nodes
+    })
+
+    # --- 8. Calcolo lunghezza e tempo: assegna la distanza ---
+    new_edges['length'] = dist
+    new_edges['slope'] = 0  
+
+    # velocità con modello
+    new_edges['velocita'] = coefficiente * np.exp(
+        -3.5 * np.abs(new_edges['slope'] + 0.05)
+    ) * (1000 / 60)
+    
+    # tempo corretto
+    new_edges['time'] = new_edges['length'] / new_edges['velocita']
+
+
+    # --- 9. Rendi bidirezionale ---
+    # prima:  centroide → nodo
+    # dopo:   nodo → centroide
+    reverse_edges = new_edges.rename(columns={'u': 'v', 'v': 'u'})
+    new_edges = pd.concat([new_edges, reverse_edges], ignore_index=True)
+
+
+
+    # --- 10. Aggiorna rete ---
+    # aggiunge i nuovi nodi  e archi  alla rete
+    nodes_updated = pd.concat([nodes, new_nodes])
+    edges_updated = pd.concat([edges, new_edges], ignore_index=True)
+    
+    
+    nodes_gdf_updated = geopandas.GeoDataFrame(
+        nodes_updated,
+        geometry=geopandas.points_from_xy(nodes_updated['x'], nodes_updated['y']),
+        crs=CRS_3857
+    )
+    
+    nodes_4326 = nodes_gdf_updated.to_crs(CRS_4326)
+    nodes_4326['x'] = nodes_4326.geometry.x
+    nodes_4326['y'] = nodes_4326.geometry.y
+
+    nodes_to_save = nodes_4326.copy()
+    nodes_to_save.index.name = 'id'
+    nodes_to_save = nodes_4326.drop(columns='geometry')
+
+    nodes_to_save.to_csv(
+        f"{output_path_bbox}/osm_network/nodes.csv"
+    )
+    edges_to_save = edges_updated[['u', 'v', 'length', 'time']]
+    
+    edges_to_save.to_csv(
+        f"{output_path_bbox}/osm_network/edges.csv",
+        index=False
+    )
 
 
