@@ -231,7 +231,7 @@ output_local_path/
 
 1.	**main_15min.py:** handles parameters from a .ini, executes steps via index_processing.py functions, and logs progress and timing.
 
-2.	**index_processing.py:** contains functions for bounding box preparation, data download (street networks and POIs by transport mode and category), proximity computation, and output saving.
+2.	**index_processing.py:** contains functions for bounding box preparation, data download, proximity computation, and output saving.
 
 3.	**park_gates.py:** manages gates for “park” category.
 
