@@ -61,7 +61,54 @@ virtual_nodes = true/false
 A separate `parameters_<city>.ini` file is created for each city that requires computation, stored in the parameters folder.
 
 The script automatically saves the hexagonal grid to the working grid folder, naming it grid.gpkg. The script also allows the use of an external grid, if provided via the `grid_gpkg` parameter.
- 
+
+
+## JSON payload
+
+The API version required a ```parameters.json``` file:
+
+```
+{
+  "aoi": {
+    "bbox":[lat_min, lon_min, lat_max, lon_max] in EPSG:4326 defines the area of interest 
+  },
+  "execution": {
+    "output_local_path": path folder,
+    "output_minio_path": null,
+    "filename":  <area of interest>_15min_<osm or local_data>,
+    "weight": "time",
+    "mode": "walk",
+    "walk_speed_kmh": 5.0,
+    "bike_speed_kmh": 15.0,
+    "sld_osm_style_path": null
+  },
+  "poi": {
+    "poi_category_osm": "all",
+    "poi_category_custom_name": null,
+    "poi_category_custom_csv": null
+  },
+  "park": {
+    "park_gates_source": "osm",
+    "park_gates_osm_buffer_m": 10.0,
+    "park_gates_csv": null,
+    "park_gates_virtual_distance_m": 100.0
+  },
+  "grid": {
+    "grid_gpkg": null,
+    "hex_diameter_m": 250,
+    "clip_layer": null
+  }
+}
+```
+
+**Required Parameters:**
+
+1. aoi.bbox: Bounding box defining the Area of Interest (EPSG:4326)
+2. execution.output_local_path: Output directory
+3. execution.filename: name for output files
+
+All other parameters are optional and will fallback to default values.
+
 ---
   
 ## Algorithm Workflow
@@ -138,6 +185,24 @@ MINIO_ENDPOINT_URL – URL of the MinIO endpoint
 main_15min.py parameters.ini
 ```
 ---
+
+### 3. API Execution
+
+The tool is exposed via a REST API accepting JSON payloads.
+
+- Endpoint: TBD
+
+- Method: POST
+ 
+- Content-Type: application/json
+
+Results can be saved locally, or directly published to GeoServer and Idra.
+
+You can call the API using curl as follows:
+```
+curl -X POST endpoint -H "Content-Type: application/json" -d @parameters.json
+```
+
 
 ## Possible Errors
 
