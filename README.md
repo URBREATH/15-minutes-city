@@ -190,7 +190,7 @@ main_15min.py parameters.ini
 
 The tool is exposed via a REST API accepting JSON payloads.
 
-- Endpoint: TBD
+- Endpoint: https://15-min-dev.urbreath.tech/execute
 
 - Method: POST
  
@@ -200,7 +200,7 @@ Results can be saved locally, or directly published to GeoServer and Idra.
 
 You can call the API using curl as follows:
 ```
-curl -X POST endpoint -H "Content-Type: application/json" -d @parameters.json
+curl -X POST [endpoint] -H "Content-Type: application/json" -d @parameters.json
 ```
 
 
