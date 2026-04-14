@@ -1,0 +1,16 @@
+flask
+pandas
+geopandas
+scipy
+numpy<2.0
+pandana
+osmnet
+Rtree
+pyproj
+shapely
+requests
+beautifulsoup4
+OSMPythonTools
+boto3
+geovoronoi
+pydantic

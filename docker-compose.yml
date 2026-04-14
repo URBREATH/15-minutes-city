@@ -1,0 +1,24 @@
+services:
+  web:
+    image: registry.urbreath.tech/15-minutes-city:0.0.7
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "15963:5000"
+    environment:
+      - FLASK_APP=main_15min_api.py
+      - FLASK_DEBUG=1
+      - QT_QPA_PLATFORM=offscreen # Enforce the variable for QGIS
+      - MINIO_ENDPOINT_URL=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+    restart: unless-stopped
+    # Connect the service to the 'dev' network
+    networks:
+      - dev
+
+# Network definition
+networks:
+  dev:
+    external: true

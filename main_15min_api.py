@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 import io
 import contextlib 
 from main_15min import run_analysis
-from model import AnalysisParams
 import os
 import json
 from scripts.errors import raise_error
@@ -39,4 +38,4 @@ def execute():
     return output, 200
 
 if __name__ == '__main__':
-    app.run(threaded=True)
+    app.run(host='0.0.0.0', threaded=True)
