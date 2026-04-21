@@ -26,4 +26,16 @@ if not logger.handlers:
     handler.setFormatter(formatter)
 
     # === Aggiunge handler al logger ===
+
+
+
+
     logger.addHandler(handler)
+
+    # “manda i log nella console” (stdout)
+    # usa lo stesso formato dei log del file (timestamp, livello, messaggio)
+    # collega questo comportamento al  logger
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
