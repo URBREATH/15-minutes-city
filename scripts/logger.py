@@ -1,7 +1,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import os
-
+import sys
 # === Percorso del log ===
 BASE_DIR = os.getcwd() 
 LOG_PATH = os.path.join(BASE_DIR, "log", "15min_logger.log")
