@@ -1,5 +1,8 @@
 # 15-minutes-city 
 
+**Provided by:** Deda next
+
+## Description
 The **15-Minute City tool** is designed to assign a proximity index to urban services within a defined geographic area. It evaluates how easily residents can access Points of Interest (PoIs) on foot or by bicycle, following the “15-minute city” concept introduced by **Carlos Moreno**.  
 This urban planning model envisions that most daily needs should be met within a 15-minute walk or bike ride from home.
 
@@ -23,7 +26,56 @@ This urban planning model envisions that most daily needs should be met within a
 | `shop`           | Shops                     |
 | `transport`      | Public transport stops    |
 
+-  The road network is downloaded through the **Pandana library**
+
 ---
+
+## Execution
+
+### 1. Programming language and libraries
+
+**Programming Language:** Python
+
+**Libraries:** Pandana
+
+
+Set the following environment variables only when running the script with direct MinIO publishing. Not required for local execution.
+
+```
+MINIO_ACCESS_KEY   – Access key used to authenticate with the MinIO service
+MINIO_SECRET_KEY   – Secret key associated with the access key
+MINIO_ENDPOINT_URL – URL of the MinIO endpoint
+```
+
+ Command for local launch:
+
+```
+main_15min.py parameters.ini
+```
+---
+
+The tool is exposed via a REST API accepting JSON payloads.
+
+- Endpoint: https://15-min-dev.urbreath.tech/execute
+
+- Method: POST
+ 
+- Content-Type: application/json
+
+Results can be saved locally, or directly published to GeoServer and Idra.
+
+You can call the API using curl as follows:
+```
+curl -X POST [endpoint] -H "Content-Type: application/json" -d @parameters.json
+```
+
+The output is a hexagon vector layer (clipped if a clipping polygon is provided) available in CSV and GPKG formats. Both formats include walking times for each service category, the average walking time, and the overall_max index.
+For each hexagon:
+
+- Walking times to the nearest PoI in each category are calculated; the model uses the **Pandana library** to find the nearest POI for each location. 
+- Walking times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean walking time across categories) and **overall_max** (maximum walking time among categories).
+
+  
 
 ## Parameters CLI
 The CLI version of the script reads a `.ini` configuration file:
@@ -61,6 +113,7 @@ virtual_nodes = true/false
 A separate `parameters_<city>.ini` file is created for each city that requires computation, stored in the parameters folder.
 
 The script automatically saves the hexagonal grid to the working grid folder, naming it grid.gpkg. The script also allows the use of an external grid, if provided via the `grid_gpkg` parameter.
+The area of interest is divided into **hexagons** with a default hex_diameter_m (125 m), generated only where OSM street nodes exist. Grid parameters are computed and stored in a CSV file (grid_parameters.csv), including the area extent and the hex_radius_m, defined as hex_diameter_m / 2. If virtual_nodes = true, a virtual node is placed at each hexagon centroid, and a connecting edge is added to the nearest OSM street node, extending the network to ensure full hexagon coverage.
 
 
 ## JSON payload
@@ -100,40 +153,6 @@ The API version required a ```parameters.json``` file:
   }
 }
 ```
-
-**Required Parameters:**
-
-1. aoi.bbox: Bounding box defining the Area of Interest (EPSG:4326)
-2. execution.output_local_path: Output directory
-3. execution.filename: name for output files
-
-All other parameters are optional and will fallback to default values.
-
----
-  
-## Algorithm Workflow
-
-### 1. OSM Data Download
-
-- The street network is downloaded from OSM through the **Pandana library**, limited to pedestrian or bicycle-accessible streets. If a network file already exists in the output_local_path folder, it is reused and not downloaded again.The same logic is applied to POIs.
-
-- Points of Interest (POIs) are handled as follows: OSM category data is downloaded only if the corresponding CSV is missing, while custom category CSVs are copied into the custom_poi folder if not already present.
-
----
-
-### 2. Hexagonal Grid Generation
-
-The area of interest is divided into **hexagons** with a default hex_diameter_m (125 m), generated only where OSM street nodes exist. Grid parameters are computed and stored in a CSV file (grid_parameters.csv), including the area extent and the hex_radius_m, defined as hex_diameter_m / 2. If virtual_nodes = true, a virtual node is placed at each hexagon centroid, and a connecting edge is added to the nearest OSM street node, extending the network to ensure full hexagon coverage.
-
----
-
-### 3. Proximity Index Calculation
-
-For each hexagon:
-
-- Walking times to the nearest PoI in each category are calculated; the model uses the **Pandana library** to find the nearest POI for each location. 
-- Walking times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean walking time across categories) and **overall_max** (maximum walking time among categories).
-
 ---
 
 ### 4. Park Gate Management (POIs) and classification
@@ -150,61 +169,7 @@ Each park is assigned access points, classified into three types depending on th
 
 ---
 
-## **Outputs:**
-
-The output is a hexagon vector layer (clipped if a clipping polygon is provided) available in CSV and GPKG formats. Both formats include walking times for each service category, the average walking time, and the overall_max index.
-
----
-
-##  Technical Architecture
-
-### 1. Programming language and libraries
-
-**Programming Language:** Python
-
-**Qgis:** The algorithm uses **QGIS in offscreen mode** to perform all geospatial computations.  Initialization includes:
-
-- Importing QGIS and Python libraries  
-- Initializing the QGIS application and Processing framework
-
-**Libraries:** Pandana
-
-### 2. Execution
-
-Set the following environment variables only when running the script with direct MinIO publishing. Not required for local execution.
-
-```
-MINIO_ACCESS_KEY   – Access key used to authenticate with the MinIO service
-MINIO_SECRET_KEY   – Secret key associated with the access key
-MINIO_ENDPOINT_URL – URL of the MinIO endpoint
-```
-
- Command for launch:
-
-```
-main_15min.py parameters.ini
-```
----
-
-### 3. API Execution
-
-The tool is exposed via a REST API accepting JSON payloads.
-
-- Endpoint: https://15-min-dev.urbreath.tech/execute
-
-- Method: POST
- 
-- Content-Type: application/json
-
-Results can be saved locally, or directly published to GeoServer and Idra.
-
-You can call the API using curl as follows:
-```
-curl -X POST [endpoint] -H "Content-Type: application/json" -d @parameters.json
-```
-
-
-## Possible Errors
+##  Errors
 
 In the logs, each error is prefixed with a timestamp, e.g.:
 
@@ -232,7 +197,7 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 | `ERR_017`  | grid_gpkg not found `<grid_gpkg>` |
  
   
-## Publication on Geoserver 
+## Publication on Urbreath Geoserver 
 
 The tool supports automatic publication to GeoServer and IDRA if output_minio_path is specified.
 
@@ -240,12 +205,6 @@ A publish.json file is always generated by default, containing all the required 
 
 For OSM categories, the .sld files located in the `style` folder are used, while for POI categories, custom .sld files can be provided using the poi_category_custom_style parameter.
 
-
-## Log rotation
-
-All messages are written to `15min_logger.log` in the `log` folder, with size-based log rotation enabled via a RotatingFileHandler. When the file reaches the configured maximum size (10 MB), a rollover occurs and a new log file is created.
-
-A maximum of three rotated log files are retained (backupCount=3), with older files automatically discarded.
 
 
 ## Output Folder Structure
@@ -292,16 +251,10 @@ output_local_path/
 ---
 
 
-## Scripts
+## Contact
 
-1.	**main_15min.py:** handles parameters from a .ini, executes steps via index_processing.py functions, and logs progress and timing.
+|  |  |
+|--------|---------|
+| Contacts | chiara.savoldi@dedagroup.it, martina.forconi@dedagroup.it |
 
-2.	**index_processing.py:** contains functions for bounding box preparation, data download, proximity computation, and output saving.
 
-3.	**park_gates.py:** manages gates for “park” category.
-
-4.	**parameters.py:** provides functions for reading input parameters from .ini file.
-
-5.	**errors.py:** error handler module that defines error codes.
-
-6.	**logger.py:** log rotation.
