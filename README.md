@@ -26,20 +26,18 @@ This urban planning model envisions that most daily needs should be met within a
 | `shop`           | Shops                     |
 | `transport`      | Public transport stops    |
 
--  The road network is downloaded through the **Pandana library**
-
+-  he road network is retrieved using the **Pandana library**, with data sourced via the Overpass API
+-  The tool uses the **Pandana library** to find the nearest POI for each location.
+-  The tool divides the area of interest into hexagons (default diameter: 250 m), created only where OSM road nodes are present.
 ---
 
 ## Execution
-
-### 1. Programming language and libraries
 
 **Programming Language:** Python
 
 **Libraries:** Pandana
 
-
-Set the following environment variables only when running the script with direct MinIO publishing. Not required for local execution.
+(Optional) Set variables only if publishing to MinIO:
 
 ```
 MINIO_ACCESS_KEY   – Access key used to authenticate with the MinIO service
@@ -47,12 +45,16 @@ MINIO_SECRET_KEY   – Secret key associated with the access key
 MINIO_ENDPOINT_URL – URL of the MinIO endpoint
 ```
 
- Command for local launch:
+### Local 
+
+Run:
 
 ```
 main_15min.py parameters.ini
 ```
 ---
+
+### API
 
 The tool is exposed via a REST API accepting JSON payloads.
 
@@ -62,21 +64,14 @@ The tool is exposed via a REST API accepting JSON payloads.
  
 - Content-Type: application/json
 
-Results can be saved locally, or directly published to GeoServer and Idra.
-
-You can call the API using curl as follows:
+API run:
 ```
 curl -X POST [endpoint] -H "Content-Type: application/json" -d @parameters.json
 ```
 
-The output is a hexagon vector layer (clipped if a clipping polygon is provided) available in CSV and GPKG formats. Both formats include walking times for each service category, the average walking time, and the overall_max index.
-For each hexagon:
-
-- Walking times to the nearest PoI in each category are calculated; the model uses the **Pandana library** to find the nearest POI for each location. 
-- Walking times are computed for each POI category, together with two aggregate metrics: **overall_average** (mean walking time across categories) and **overall_max** (maximum walking time among categories).
+The output is a hexagon vector layer (clipped if a clipping polygon is provided) available in CSV and GPKG formats. Both formats include walking times for each service category, the average walking time (mean walking time across categories), and the overall_max index (maximum walking time among categories).
 
   
-
 ## Parameters CLI
 The CLI version of the script reads a `.ini` configuration file:
 
@@ -90,7 +85,9 @@ filename = <area of interest>_15min_<osm or local_data>
 weight = time | distance
 mode = walk | bike
 walk_speed_kmh =  walking speed (default = 5.0 Km/h)  
-bike_speed_kmh = biking speed (default = 15.0 Km/h) 
+bike_speed_kmh = biking speed (default = 15.0 Km/h)
+output_format = csv | gpkg | geojson
+output_EPSG = output CRS EPSG code (metric; default: 3857)
 [poi]
 poi_category_osm = all | one of the category in `poi_category_osm_tag.json`
 poi_category_custom_name = comma-separated list, names are lowercased and spaces removed
@@ -108,12 +105,15 @@ clip_layer = full path to a GPKG polygon file in EPSG:3857 used to clip the area
 virtual_nodes = true/false
 ```
 
-**Minimum required parameters: area of interest and the path folder/filename**; default (poi_category_osm = ‘all’). The filename identifies the area of interest and is used as the output name for both the CSV and GPKG files.
+**Minimum required parameters: area of interest and the path folder/filename**; default (poi_category_osm = ‘all’). 
 
 A separate `parameters_<city>.ini` file is created for each city that requires computation, stored in the parameters folder.
 
-The script automatically saves the hexagonal grid to the working grid folder, naming it grid.gpkg. The script also allows the use of an external grid, if provided via the `grid_gpkg` parameter.
-The area of interest is divided into **hexagons** with a default hex_diameter_m (125 m), generated only where OSM street nodes exist. Grid parameters are computed and stored in a CSV file (grid_parameters.csv), including the area extent and the hex_radius_m, defined as hex_diameter_m / 2. If virtual_nodes = true, a virtual node is placed at each hexagon centroid, and a connecting edge is added to the nearest OSM street node, extending the network to ensure full hexagon coverage.
+The script generates a hexagonal grid and saves it as grid.gpkg in the working directory, with the option to use an external grid via the grid_gpkg parameter.
+
+Grid parameters, such as area extent and hexagon radius, are stored in grid_parameters.csv.
+
+If virtual_nodes = true, a node is added at each hexagon centroid and connected to the nearest OSM street node, ensuring full network coverage.
 
 
 ## JSON payload
@@ -133,12 +133,14 @@ The API version required a ```parameters.json``` file:
     "mode": "walk",
     "walk_speed_kmh": 5.0,
     "bike_speed_kmh": 15.0,
-    "sld_osm_style_path": null
+    "output_format":,
+    "output_EPSG":
   },
   "poi": {
     "poi_category_osm": "all",
     "poi_category_custom_name": null,
-    "poi_category_custom_csv": null
+    "poi_category_custom_csv": null,
+    "poi_category_custom_style": null
   },
   "park": {
     "park_gates_source": "osm",
@@ -149,7 +151,8 @@ The API version required a ```parameters.json``` file:
   "grid": {
     "grid_gpkg": null,
     "hex_diameter_m": 250,
-    "clip_layer": null
+    "clip_layer": null,
+    "virtual_nodes": False
   }
 }
 ```
@@ -195,7 +198,8 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 | `ERR_015`  | poi_category_custom_csv not found `<poi_category_custom_csv>` |
 | `ERR_016`  | clip_layer not found `<clip_layer>` |
 | `ERR_017`  | grid_gpkg not found `<grid_gpkg>` |
- 
+| `ERR_018`  | Invalid parameter value `output_format` |
+| `ERR_019`  | Invalid parameter value `output_EPSG` | 
   
 ## Publication on Urbreath Geoserver 
 
@@ -206,17 +210,14 @@ A publish.json file is always generated by default, containing all the required 
 For OSM categories, the .sld files located in the `style` folder are used, while for POI categories, custom .sld files can be provided using the poi_category_custom_style parameter.
 
 
-
 ## Output Folder Structure
 
 Output directory is created at output_local_path. Inside it:
 
 - **grid**: contains the **grid_parameter.csv** and the **grid.gpkg**
   
-- **`<filename>.csv`**
+- **output**
   
-- **`<filename>.gpkg`**
-
 - **_publish.json** (JSON for automatic publication on Geosever)
 
 -  **osm_pois**: contains one CSV for each osm category
@@ -227,8 +228,8 @@ Output directory is created at output_local_path. Inside it:
 
 ```
 output_local_path/
-├── <filename>.csv   
-├── <filename>.gpkg
+├── output/
+│   ├── <filename>.gpkg
 ├── _publish.json 
 ├── grid/
 │   ├── grid_parameter.csv
@@ -250,11 +251,9 @@ output_local_path/
 ```
 ---
 
-
 ## Contact
 
 |  |  |
-|--------|---------|
 | Contacts | chiara.savoldi@dedagroup.it, martina.forconi@dedagroup.it |
 
 
