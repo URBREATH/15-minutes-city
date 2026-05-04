@@ -2,6 +2,7 @@
 
 **Provided by:** Deda next
 
+---
 ## Description
 The **15-Minute City tool** is designed to assign a proximity index to urban services within a defined geographic area. It evaluates how easily residents can access Points of Interest (PoIs) on foot or by bicycle, following the “15-minute city” concept introduced by **Carlos Moreno**.  
 This urban planning model envisions that most daily needs should be met within a 15-minute walk or bike ride from home.
@@ -26,7 +27,7 @@ This urban planning model envisions that most daily needs should be met within a
 | `shop`           | Shops                     |
 | `transport`      | Public transport stops    |
 
--  he road network is retrieved using the **Pandana library**, with data sourced via the Overpass API
+-  The road network is retrieved using the **Pandana library**, with data sourced via the Overpass API.
 -  The tool uses the **Pandana library** to find the nearest POI for each location.
 -  The tool divides the area of interest into hexagons (default diameter: 250 m), created only where OSM road nodes are present.
 ---
@@ -68,10 +69,10 @@ API run:
 ```
 curl -X POST [endpoint] -H "Content-Type: application/json" -d @parameters.json
 ```
-
+---
 The output is a hexagon vector layer (clipped if a clipping polygon is provided) available in CSV and GPKG formats. Both formats include walking times for each service category, the average walking time (mean walking time across categories), and the overall_max index (maximum walking time among categories).
 
-  
+---  
 ## Parameters CLI
 The CLI version of the script reads a `.ini` configuration file:
 
@@ -253,7 +254,6 @@ output_local_path/
 
 ## Contact
 
-|  |  |
-| Contacts | chiara.savoldi@dedagroup.it, martina.forconi@dedagroup.it |
-
+- chiara.savoldi@dedagroup.it  
+- martina.forconi@dedagroup.it  
 
