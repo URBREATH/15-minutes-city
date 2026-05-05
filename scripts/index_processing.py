@@ -36,42 +36,49 @@ from shapely import wkt
 from pyproj import Proj, transform
 import ast
 from shapely.geometry import Polygon
-from .park_gates import GatesA, GatesB, GatesC
-from qgis.core import *  # Include tutto da qgis.core
-from qgis.analysis import QgsNativeAlgorithms
-from qgis.PyQt.QtCore import QVariant
-import processing
+from .park_gates import gates_a, gates_b, gates_c
 from requests.exceptions import HTTPError
-from qgis.utils import plugins
 from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
 import shutil
 import warnings
 import tempfile
 import glob
-import boto3
+from io import BytesIO
 import random
 from scripts.logger import logger
 
+#osm.settings['user_agent'] = "15min-tool contact: chiara.savoldi https://www.dedanext.it/topic-citta-15-minuti/"
+headers = {
+    "Accept": "application/json",
+    "User-Agent": (
+        "15min-tool"
+        "contact: chiara.savoldi"
+    ),
+    "Referer": "https://www.dedanext.it/topic-citta-15-minuti/"
+}
 
+osmnet.headers = headers
+
+from scripts.storage_minio import upload_on_minio,get_folder,split_path,get_s3_client,minio_file_exists,minio_copy_prefix,minio_list_poi_categories,is_minio_path,split_bucket_and_prefix,load_pois_from_minio
 warnings.filterwarnings("ignore")
 # Supply the path to the qgis install location:  imposti QGIS per girare senza GUI
-os.environ["QT_QPA_PLATFORM"] = "offscreen"
-QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/bin/qgis", True)
-# QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/", True)
-gui_flag = False
-app = QgsApplication([], gui_flag)
-app.initQgis()
-
-# Inizializza Processing : inizializza il framework Processing di QGIS, che gestisce gli algoritmi (come GDAL, native tools, plugin).
-from processing.core.Processing import Processing
-Processing.initialize()
-
-# aggiungi il provider di algoritmi nativi QGIS (buffer, raster, ecc.) al registry Processing.
-
-# processing permette di eseguire algoritmi da codice
-import processing
-
-logger.info("QGIS is active!")
+#os.environ["QT_QPA_PLATFORM"] = "offscreen"
+#QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/bin/qgis", True)
+## QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/", True)
+#gui_flag = False
+#app = QgsApplication([], gui_flag)
+#app.initQgis()
+#
+## Inizializza Processing : inizializza il framework Processing di QGIS, che gestisce gli algoritmi (come GDAL, native tools, plugin).
+#from processing.core.Processing import Processing
+#Processing.initialize()
+#
+## aggiungi il provider di algoritmi nativi QGIS (buffer, raster, ecc.) al registry Processing.
+#
+## processing permette di eseguire algoritmi da codice
+#import processing
+#
+#logger.info("QGIS is active!")
 #Variabili globali
 
 
@@ -83,7 +90,6 @@ EPSG_3857 = 'EPSG:3857'
 CRS_3857 = 3857
 EPSG_4326 = 'EPSG:4326'
 CRS_4326 = 4326
-EPSG_32632 = 'EPSG:32632'
 EPSG_GATE = 'EPSG:4326'
 EPSG_METRIC = 'EPSG:3857'
 COEFFICIENT_WALK = 6 #km/h
@@ -141,14 +147,31 @@ def decay(time):
 # BBOX
 
 def create_bbox(bbox, output_path, output_minio_path,hex_diameter_m, access_key, secret_key, endpoint_url):
+    if access_key and secret_key and endpoint_url and is_minio_path(output_path):
+        
+        bucket_name, filepath_minio = split_path(output_minio_path)
+        bucket_name, filepath = split_path(output_path)
+        minio_copy_prefix(
+                        bucket=bucket_name,
+                        source_prefix=f"{filepath}/grid/",
+                        dest_prefix=f"{filepath_minio}/grid",
+                        endpoint_url=endpoint_url,
+                        access_key=access_key,
+                        secret_key=secret_key
+            )
+        return 0
+              
     grid_folder = os.path.join(output_path, "grid")
     csv_path = f"{grid_folder}/grid_parameter.csv"
     if os.path.exists(grid_folder):
-        logger.info(f"The folder {grid_folder} already exists.\n", )
-        if access_key and secret_key and endpoint_url: 
-            minio_path = os.path.join(output_minio_path, "grid") 
-            get_folder(csv_path, minio_path,access_key, secret_key, endpoint_url)
-        return 0
+        
+        if os.path.exists(grid_folder):
+            logger.info(f"The folder {grid_folder} already exists.\n", )
+            if access_key and secret_key and endpoint_url: 
+                minio_path = os.path.join(output_minio_path, "grid") 
+                get_folder(csv_path, minio_path,access_key, secret_key, endpoint_url)
+            return 0
+        
     else:
         
         latoXCella = 3/2 * hex_diameter_m
@@ -208,6 +231,7 @@ def download(bbox_tassello, output_path_bbox,
     return 0
 
 
+    
 def download_poi_osm(
     bbox_tassello,
     output_path_bbox,
@@ -244,6 +268,7 @@ def download_poi_osm(
     # -------------------
     # OSM LOGIC
     # -------------------
+            
     if poi_category_osm is not None:
        
         with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
@@ -254,8 +279,42 @@ def download_poi_osm(
             categories_to_download = valid_poi_category_osm
         else:
             categories_to_download = {poi_category_osm.lower()}
- 
+        skip_osm_download = False
 
+        if access_key and secret_key and endpoint_url and is_minio_path(output_path_bbox):
+
+            bucket_name, filepath = split_path(output_path_bbox)
+
+            # categorie già presenti su MinIO
+            existing_categories = minio_list_poi_categories(
+                bucket=bucket_name,
+                prefix=f"{filepath}/osm_poi/",
+                endpoint_url=endpoint_url,
+                access_key=access_key,
+                secret_key=secret_key
+            )
+        
+            logger.info(f"POI categories already on MinIO: {existing_categories}")
+        
+            # scarico SOLO quelle mancanti
+            categories_to_download = categories_to_download - existing_categories
+
+            
+            bucket_name, filepath_minio = split_path(output_minio_path)
+
+            minio_copy_prefix(
+                        bucket=bucket_name,
+                        source_prefix=f"{filepath}/osm_poi/",
+                        dest_prefix=f"{filepath_minio}/osm_poi",
+                        endpoint_url=endpoint_url,
+                        access_key=access_key,
+                        secret_key=secret_key
+            )
+                    
+            if not categories_to_download:
+                logger.info("All requested POI categories already exist on MinIO. Skipping.")
+                skip_osm_download = True
+            
         if 'park' in categories_to_download and not os.path.isfile(f"{poi_folder}/park.csv"):
             logger.info("Downloading park from OSM and handling park gates...")
             try:
@@ -363,7 +422,7 @@ def download_poi_osm(
                 for key, values in tag_dict.items():
                     values_regex = "|".join(values)
                     tag_query = f'"{key}"~"{values_regex}"'
-                               
+                            
                     logger.info(f"Downloading {osm_cat} with tags: {tag_query}")
                     max_retries = 2
                     for attempt in range(max_retries):
@@ -377,29 +436,30 @@ def download_poi_osm(
                             )
                             if df is None or df.empty:
                                 df = pd.DataFrame(columns=["id", "lat", "lon"])
-    
+                
                             dfs.append(df)
                             break 
                         except (HTTPError, requests.exceptions.RequestException) as e:
                             wait = (10 * (attempt + 1)) + random.uniform(2,6)
                             time.sleep(wait)
                         except Exception as e:
+                            logger.warning(f"node_query failed for {osm_cat} / {tag_query}: {repr(e)}")
                             empty_df = pd.DataFrame(columns=["id", "lat", "lon"])
                             dfs.append(empty_df)
-
+                
                 time.sleep(15)                    
                 if len(dfs) > 0:
                     result = pd.concat(dfs, ignore_index=True)
                 else:
                     result = pd.DataFrame(columns=["id", "lat", "lon"])
-
+                
                 result.to_csv(
                     os.path.join(poi_folder, f"{osm_cat}.csv")
                 )
             else:
                 logger.info(f'Category {osm_cat} csv skipped or already presents.')                        
 
-        if access_key and secret_key and endpoint_url: 
+        if access_key and secret_key and endpoint_url and skip_osm_download is False: 
             get_folder(poi_folder, output_minio_path,access_key, secret_key, endpoint_url)
     # -------------------
     # CUSTOM CSVs
@@ -426,9 +486,6 @@ def download_poi_osm(
 
     
 def gates_calculation(park_gdf, gates_df, output_path_bbox, park_gates_osm_buffer_m, park_gates_virtual_distance_m, streets=None, gate_source='A'):
-    temp_dir = os.path.join(QgsProject.instance().homePath(), "temp_gates")
-    temp_gpkg = os.path.join(temp_dir, "temp_gates.gpkg")
-    os.makedirs(temp_dir, exist_ok=True)
     
 
     if gates_df is not None:
@@ -471,15 +528,8 @@ def gates_calculation(park_gdf, gates_df, output_path_bbox, park_gates_osm_buffe
         park_gdf = park_gdf.copy()
         park_gdf['unique_id'] = range(1, len(park_gdf)+1)
 
-    park_layer = QgsVectorLayer(park_gdf.to_json(), "green_areas", "ogr")
-    
-    park_gdf.to_file(temp_gpkg, layer='green_areas', driver='GPKG')
 
-    if not park_layer.isValid():
-        raise ValueError("Layer 'green_areas' not valid!")
-    else:
-        logger.info(f"Park layer valid with {park_layer.featureCount()} features.")   
-    
+
     # Per le streets (se servono)
     if streets is not None and 'unique_id' not in streets.columns:
         streets = streets.copy()
@@ -492,52 +542,32 @@ def gates_calculation(park_gdf, gates_df, output_path_bbox, park_gates_osm_buffe
      
     # Algoritmo di calcolo gate
 
-    streets_layer = QgsVectorLayer(streets.to_json(), "streets", "ogr")
-    if not streets_layer.isValid():
-        raise ValueError("Layer 'streets' not valid!")
-    else:
-        logger.info(f"Streets layer valid with {streets_layer.featureCount()} features.")
-    
-    if gate_source == 'A':
-    
-        alg = GatesA()
-        output_gpkg = os.path.join(temp_dir, "gatesA.gpkg")
+    if gate_source == 'A':        
         # Creazione layer QGIS
-        gates_layer = QgsVectorLayer(gates_gdf.to_json(), "gate_osm", "ogr")
-    
-        gates_gdf.to_file(temp_gpkg, layer='gate_osm', driver='GPKG')
 
-        params = {
-        'green_areas': park_layer,
-        'gate_osm': gates_layer,
-        'id_green_area': 'unique_id', 
-        'park_gates_osm_buffer_m': park_gates_osm_buffer_m ,         
-        'Gates': output_gpkg
-        }
+        result_gdf = gates_a(
+            green=park_gdf,
+            gates=gates_gdf,
+            id_green_area="unique_id",
+            buffer_m=park_gates_osm_buffer_m
+        )
+
     elif gate_source == 'road_intersect':  # tipo B/C o ABC
-        alg = GatesB()
-        output_gpkg = os.path.join(temp_dir, "gatesB.gpkg")    
-        params = { 
-            'green_areas': park_layer,
-            'streets': streets_layer,
-            'id_green_area': 'unique_id',          
-            'Gates': output_gpkg
-        }
+        
+
+        result_gdf = gates_b(
+            green=park_gdf,
+            streets=streets,
+            id_green_area="unique_id"
+        )
     else:
-        alg = GatesC()
-        output_gpkg = os.path.join(temp_dir, "gatesC.gpkg")
-        params = {
-            'green_areas': park_layer,
-            'park_gates_virtual_distance_m':park_gates_virtual_distance_m,               
-            'Gates': output_gpkg
-        }   
-    
-    # Contesto QGIS
-    context = QgsProcessingContext()
-    feedback = QgsProcessingFeedback()
-    results = alg.processAlgorithm(params, context, feedback)
-    
-    result_gdf = geopandas.read_file(results['Gates'])
+        result_gdf = gates_c(
+            green=park_gdf,
+            id_green_area="unique_id",
+            distance_m=park_gates_virtual_distance_m
+        )
+ 
+ 
     if result_gdf is not None and not result_gdf.empty:
     
         result_gdf = result_gdf.to_crs(EPSG_4326)   
@@ -679,11 +709,7 @@ def handle_gates(gate_source, bbox_tassello, output_path_bbox,  gates, park=None
         result_gdf = gates_calculation(park, None, output_path_bbox,park_gates_osm_buffer_m, park_gates_virtual_distance_m, None, gate_source)
     
     result_gdf.to_csv(park_csv_path_local, index=False)
-    temp_dir = os.path.join(QgsProject.instance().homePath(), "temp_gates")
-    # Controlla se esiste → se sì, elimina
-    if os.path.exists(temp_dir):
-        shutil.rmtree(temp_dir)
-        #logger.info(f"Cartella {temp_dir} eliminata")
+
 
 def download_streets(bbox):
     overpass = Overpass()
@@ -762,14 +788,52 @@ def download_streets(bbox):
 
 
 # -----------------------------------------------------------------------------------------------------------------------------------
-           
+
+
 def download_network_osm(bbox_tassello, output_path_bbox,access_key, secret_key, endpoint_url, output_minio_path, mode = 'walk', weight='time'):
 
           
     if not os.path.exists("{}/osm_network".format(output_path_bbox)):
         os.makedirs("{}/osm_network".format(output_path_bbox))
     local_folder = f"{output_path_bbox}/osm_network"   
-    
+
+    if access_key and secret_key and endpoint_url:
+
+        bucket_name, filepath = split_path(output_path_bbox)
+        
+
+
+        nodes_exists = minio_file_exists(
+            bucket=bucket_name,
+            object_key=f"{filepath}/osm_network/nodes.csv",
+            endpoint_url=endpoint_url,
+            access_key=access_key,
+            secret_key=secret_key
+        )
+        
+        edges_exists = minio_file_exists(
+            bucket=bucket_name,
+            object_key=f"{filepath}/osm_network/edges.csv",
+            endpoint_url=endpoint_url,
+            access_key=access_key,
+            secret_key=secret_key
+        )
+
+        if nodes_exists and edges_exists:
+            logger.info("OSM network already exists on MinIO, skipping download.")
+
+            bucket_name, filepath_minio = split_path(output_minio_path)
+
+            minio_copy_prefix(
+                        bucket=bucket_name,
+                        source_prefix=f"{filepath}/osm_network/",
+                        dest_prefix=f"{filepath_minio}/osm_network",
+                        endpoint_url=endpoint_url,
+                        access_key=access_key,
+                        secret_key=secret_key
+            )
+            return 0
+
     if not os.path.isfile("{}/osm_network/nodes.csv".format(output_path_bbox)) or not os.path.isfile("{}/osm_network/edges.csv".format(output_path_bbox)):    
         
         logger.info('DOWNLOAD NETWORK start.')
@@ -798,8 +862,8 @@ def download_network_osm(bbox_tassello, output_path_bbox,access_key, secret_key,
         logger.info('DOWNLOAD NETWORK end.\n')
     
         
-    if access_key and secret_key and endpoint_url: 
-        get_folder(local_folder,output_minio_path, access_key, secret_key, endpoint_url)
+        if access_key and secret_key and endpoint_url: 
+            get_folder(local_folder,output_minio_path, access_key, secret_key, endpoint_url)
         
     else:
         logger.info('Files nodes and edges already exists.\n')        
@@ -811,19 +875,76 @@ def download_network_osm(bbox_tassello, output_path_bbox,access_key, secret_key,
         
 # -----------------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------------
-# GET NETWORK OSM FUNCTION
 
-def get_network_osm(bbox_tassello, output_path_bbox):
 
-    network = osm.pdna_network_from_bbox(bbox_tassello[0], bbox_tassello[1], bbox_tassello[2],bbox_tassello[3], network_type='walk', two_way = False)
-    df_edges = network.edges_df.reset_index()
-    df_nodes = network.nodes_df.reset_index()
-    df_edges.rename(columns={'from': 'u', 'to': 'v', 'distance': 'length'}, inplace=True)
-    gdf_nodes = geopandas.GeoDataFrame(df_nodes)
-    nodes = df_nodes.set_index('id')
-    gdf_edges = geopandas.GeoDataFrame(df_edges)
-    gdf_edges['geometry'] = df_edges.apply(lambda row: crea_linestring(row, nodes), axis=1)
-    return 0,gdf_nodes, gdf_edges
+def get_network_osm(bbox_tassello, output_path_bbox,retries=3,sleep_seconds=1):
+    last_exc = None
+
+    for attempt in range(1, retries + 1):
+        try:
+            logger.info(f"OSM network download attempt {attempt}/{retries}")
+
+            network = osm.pdna_network_from_bbox(
+                bbox_tassello[0],
+                bbox_tassello[1],
+                bbox_tassello[2],
+                bbox_tassello[3],
+                network_type="walk",
+                two_way=False
+            )
+
+            # ---------- NODES ----------
+            df_nodes = network.nodes_df.reset_index()
+
+            gdf_nodes = geopandas.GeoDataFrame(df_nodes)
+
+            # ---------- EDGES ----------
+            df_edges = network.edges_df.reset_index()
+            df_edges.rename(
+                columns={"from": "u", "to": "v", "distance": "length"},
+                inplace=True
+            )
+
+            nodes = df_nodes.set_index("id")
+
+            gdf_edges = geopandas.GeoDataFrame(df_edges)
+            gdf_edges['geometry'] = df_edges.apply(lambda row: crea_linestring(row, nodes), axis=1)
+            logger.info("OSM network successfully downloaded.")
+            return 0, gdf_nodes, gdf_edges
+
+        except Exception as e:
+            last_exc = e
+            logger.warning(f"Attempt {attempt} failed: {e}")
+
+            if attempt < retries:
+                time.sleep(sleep_seconds)
+
+    # ------------------------------------------------------------------
+    # FALLBACK: network non disponibile → DATAFRAME VALIDI MA VUOTI
+    # ------------------------------------------------------------------
+    logger.error("All retries failed. Creating empty OSM network.")
+
+    # NODES fallback
+    gdf_nodes = geopandas.GeoDataFrame(
+        columns=["id", "x", "y", "geometry"],
+        geometry="geometry",
+        crs=EPSG_4326
+    )
+
+    # EDGES fallback
+    gdf_edges = geopandas.GeoDataFrame(
+        {
+            "u": [],
+            "v": [],
+            "length": [],
+            "time": []
+        },
+        geometry=[],
+        crs=EPSG_4326
+    )
+
+    return 0, gdf_nodes, gdf_edges
+
 
 
  # -----------------------------------------------------------------------------------------------------------------------------------
@@ -848,6 +969,16 @@ def calculate_edges_time_from_nodes(gdf_edges, mode = 'walk'):
         coefficiente = COEFFICIENT_WALK
     else:
         coefficiente = COEFFICIENT_BIKE
+
+
+    if gdf_edges.empty:
+        logger.warning("Edges GeoDataFrame is empty. Skipping time calculation.")
+
+        for col in ['velocita', 'time']:
+            if col not in gdf_edges.columns:
+                gdf_edges[col] = []
+
+        return 0, gdf_edges
     
            
     gdf_edges['slope'] = 0.0         
@@ -876,7 +1007,7 @@ def calculate_edges_time_from_nodes(gdf_edges, mode = 'walk'):
 # WALK SCORE FUNCTION
 
 
-def walkScore_min(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_speed_kmh, mode = 'walk',weight='time'):
+def walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpoint_url, output_minio_path, walk_speed_kmh, bike_speed_kmh, mode = 'walk',weight='time'):
 
         
     if weight == 'time':
@@ -891,39 +1022,66 @@ def walkScore_min(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_speed
             velocita = (bike_speed_kmh / 3.6)
             peso = DISTMAX_BIKE  
 
+    if access_key and secret_key and endpoint_url and is_minio_path(output_path_bbox):
+        
+        bucket_name, filepath_minio = split_path(output_minio_path)
 
-     
-    nodes = pd.read_csv("{}/osm_network/nodes.csv".format(output_path_bbox), index_col=0)
-    edges = pd.read_csv("{}/osm_network/edges.csv".format(output_path_bbox), index_col=[0,1])
+        s3 = get_s3_client(access_key, secret_key, endpoint_url)
+        obj = s3.get_object(
+            Bucket=bucket_name,
+            Key=f"{filepath_minio}/osm_network/nodes.csv"
+        )
+        nodes = pd.read_csv(BytesIO(obj["Body"].read()), index_col=0)
+        obj = s3.get_object(
+            Bucket=bucket_name,
+            Key=f"{filepath_minio}/osm_network/edges.csv"
+        )
+        edges = pd.read_csv(BytesIO(obj["Body"].read()), index_col=[0,1])
+        
+    else:
+        nodes = pd.read_csv("{}/osm_network/nodes.csv".format(output_path_bbox), index_col=0)
+        edges = pd.read_csv("{}/osm_network/edges.csv".format(output_path_bbox), index_col=[0,1])
     
    
     edges = edges.reset_index()
+
     
     if not edges.empty:
 
-        poi_folder = os.path.join(output_path_bbox, "osm_poi")
-        poi_folder_custom = os.path.join(output_path_bbox, "custom_poi")
+        if is_minio_path(output_path_bbox):
+            
+            pois, list_string = load_pois_from_minio(
+                output_path_bbox,
+                access_key,
+                secret_key,
+                endpoint_url
+            )
 
-        # legge automaticamente tutti i csv presenti
-        poi_folders = [poi_folder, poi_folder_custom]
-        
-        csv_files = []
-        
-        # raccoglie tutti i csv dalle cartelle esistenti
-        for folder in poi_folders:
-            if os.path.isdir(folder):
-                csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
-        
-        csv_files = sorted(csv_files)
-        
-        list_string = []
-        pois = []
-        
-        for f in csv_files:
-            name = os.path.splitext(os.path.basename(f))[0]
-            df = pd.read_csv(f)
-            list_string.append(name)
-            pois.append(df)
+        else:
+            
+            poi_folder = os.path.join(output_path_bbox, "osm_poi")
+            poi_folder_custom = os.path.join(output_path_bbox, "custom_poi")
+
+            # legge automaticamente tutti i csv presenti
+            poi_folders = [poi_folder, poi_folder_custom]
+            
+            csv_files = []
+            
+            # raccoglie tutti i csv dalle cartelle esistenti
+            for folder in poi_folders:
+                if os.path.isdir(folder):
+                    csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
+            
+            csv_files = sorted(csv_files)
+            
+            list_string = []
+            pois = []
+            
+            for f in csv_files:
+                name = os.path.splitext(os.path.basename(f))[0]
+                df = pd.read_csv(f)
+                list_string.append(name)
+                pois.append(df)
         
         logger.info("POIs categories: %s", list_string)
 
@@ -961,7 +1119,8 @@ def walkScore_min(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_speed
         logger.info('Function walkScore_min completed.\n')
         
         return 0, walk_score    
-
+    else:
+        return 0, None
 
 
         
@@ -972,7 +1131,7 @@ def walkScore_min(output_path_bbox, poi_category_osm, walk_speed_kmh, bike_speed
 
 
 def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,custom_names,custom_csvs,grid_gpkg,poi_category_osm, clip_layer, filename,access_key,secret_key,endpoint_url,
- poi_category_custom_style,output_minio_path,virtual_nodes, bike_speed_kmh, walk_speed_kmh,mode = 'walk', weight='time'):
+ poi_category_custom_style,output_minio_path,virtual_nodes,output_format,output_EPSG, bike_speed_kmh, walk_speed_kmh,mode = 'walk', weight='time'):
             
     bbox = json.loads(bbox_tassello)
     grid_folder = os.path.join(output_path_bbox, "grid")
@@ -1061,7 +1220,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             get_folder(outputPath_grid, minio_path,access_key, secret_key, endpoint_url)
             
     # Chiamata della funzione walkScore_min        
-    result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,walk_speed_kmh, bike_speed_kmh, mode, weight)
+    result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpoint_url, output_minio_path,walk_speed_kmh, bike_speed_kmh, mode, weight)
     
     if walk_score is None or walk_score.empty:
         ws = []
@@ -1078,52 +1237,71 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         
     
         walk_score = geopandas.GeoDataFrame(walk_score, geometry = geopandas.points_from_xy(walk_score.x, walk_score.y))
-
-        
-        poi_folder = os.path.join(output_path_bbox, "osm_poi")
-        custom_poi_folder = os.path.join(output_path_bbox, "custom_poi")
-        folders = [poi_folder, custom_poi_folder]
-        
-        # legge automaticamente tutti i csv presenti
-        csv_files = []
+        pois = []
         categories = []
-        # raccoglie tutti i csv dalle cartelle esistenti
-        for folder in folders:
-            if os.path.isdir(folder):
-                csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
         
-        csv_files = sorted(csv_files)
-                
-        for f in csv_files:
-            name = os.path.splitext(os.path.basename(f))[0]
-            categories.append(name)
+        if is_minio_path(output_path_bbox):
+            # ------------------------
+            # MINIO
+            # ------------------------
+            pois, categories = load_pois_from_minio(
+                output_path_bbox,
+                access_key,
+                secret_key,
+                endpoint_url
+            )
+        
+        else:
+            # ------------------------
+            # LOCALE
+            # ------------------------
+            poi_folder = os.path.join(output_path_bbox, "osm_poi")
+            custom_poi_folder = os.path.join(output_path_bbox, "custom_poi")
+            folders = [poi_folder, custom_poi_folder]
+        
+            csv_files = []
+        
+            for folder in folders:
+                if os.path.isdir(folder):
+                    csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
+        
+            csv_files = sorted(csv_files)
+        
+            for f in csv_files:
+                name = os.path.splitext(os.path.basename(f))[0]
+                df = pd.read_csv(f)
+        
+                categories.append(name)
+                pois.append(df)
         
         logger.info("POIs categories: %s", categories)
+
+        
                
        # Verify empty hexag
         if virtual_nodes:
             hexag = geopandas.sjoin(grid, walk_score, how='left', predicate = 'contains')
 
-
             hexag['missing_categories'] = hexag.apply(
             lambda row: [cat for cat in categories if pd.isna(row.get(f'minutes_{cat}'))],
             axis=1
             )
-
             # Seleziona solo gli esagoni che hanno almeno una categoria mancante
             empty_hexag = hexag[hexag['missing_categories'].apply(len) > 0].copy()
-
             centroids_empty_hexag = empty_hexag.copy()
             centroids_empty_hexag['geometry'] = centroids_empty_hexag.geometry.centroid
             
             attach_centroids_to_network(
                 centroids_empty_hexag,
                 output_path_bbox,
-                mode
+                mode,
+                output_minio_path,
+                access_key,
+                secret_key,
+                endpoint_url
             )
-            
             # AGAIN            
-            result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,walk_speed_kmh, bike_speed_kmh, mode, weight)
+            result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpoint_url, output_minio_path,walk_speed_kmh, bike_speed_kmh, mode, weight)
             walk_score = geopandas.GeoDataFrame(walk_score, geometry = geopandas.points_from_xy(walk_score.x, walk_score.y))  
 
        
@@ -1236,7 +1414,36 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             cols_to_keep += ['overall_average', 'overall_max']
         
         # Se clip layer è fornito e valido
-        if clip_layer and os.path.isfile(clip_layer):
+        
+        if clip_layer and is_minio_path(output_path_bbox):
+        
+            try:
+                bucket_name, clip_key = split_path(clip_layer)
+                s3 = get_s3_client(access_key, secret_key, endpoint_url)
+                
+                obj = s3.get_object(
+                    Bucket=bucket_name,
+                    Key=clip_key
+                )
+        
+
+                with tempfile.NamedTemporaryFile(suffix=".gpkg") as tmp:
+                    s3.download_fileobj(bucket_name, clip_key, tmp)
+                    tmp.flush()
+                
+                    clip_layer = geopandas.read_file(tmp.name)
+                    clip_layer = clip_layer.to_crs(EPSG_METRIC)
+                
+                hexag_to_save = geopandas.clip(hexag, clip_layer)
+
+        
+            except Exception as e:
+                logger.warning(f"Clip layer on MinIO not usable: {e}")
+                clip_layer = None      
+                hexag_to_save = hexag.copy()
+
+            
+        elif clip_layer and os.path.isfile(clip_layer) and not is_minio_path(output_path_bbox):
             clip_layer = geopandas.read_file(clip_layer)
             clip_layer = clip_layer.to_crs(EPSG_METRIC)
             hexag_to_save = geopandas.clip(hexag, clip_layer)
@@ -1244,25 +1451,40 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             hexag_to_save = hexag.copy()  # Nessun clipping
         
         
+        
         # Mantieni solo le colonne importanti
         hexag_to_save = hexag_to_save[[c for c in cols_to_keep if c in hexag_to_save.columns]]
 
-    
-        # Salvataggio GPKG
-        hexag_to_save.to_file(
-            f"{output_path_bbox}/{filename}.gpkg",
-            layer=f"{filename}",
-            driver="GPKG"
-        )
+        output_dir = f"{output_path_bbox}/output"
+
+        # Crea la cartella se non esiste
+        os.makedirs(output_dir, exist_ok=True)
         
-        # Salvataggio CSV
-        hexag_to_save.to_csv(
-            f"{output_path_bbox}/{filename}.csv",
-            sep=';', index=False
-        )
+        hexag_to_save = hexag_to_save.to_crs(f"EPSG:{output_EPSG}")
+
+
+        if output_format == 'gpkg':
+            # Salvataggio GPKG
+            hexag_to_save.to_file(
+                f"{output_dir}/{filename}.gpkg",
+                layer=f"{filename}",
+                driver="GPKG"
+            )
+        elif output_format == "geojson":
+            # shapefile = più file (.shp, .dbf, .shx, .prj...) nella stessa cartella
+            hexag_to_save.to_file(
+                os.path.join(output_dir, f"{filename}.geojson"),
+                driver="GeoJSON"
+            )
+        else:       
+            # Salvataggio CSV
+            hexag_to_save.to_csv(
+                f"{output_dir}/{filename}.csv",
+                sep=';', index=False
+            )
+            
         if access_key and secret_key and endpoint_url: 
-            get_folder(f"{output_path_bbox}/{filename}.gpkg", output_minio_path,access_key, secret_key, endpoint_url)
-            get_folder(f"{output_path_bbox}/{filename}.csv", output_minio_path, access_key, secret_key, endpoint_url)         
+            get_folder(output_dir, output_minio_path,access_key, secret_key, endpoint_url)
         
             
             get_folder("style", output_minio_path,access_key, secret_key, endpoint_url)
@@ -1271,7 +1493,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
                 categories.append("overall_average")
                 categories.append("overall_max")
             publish_data = {
-                    "analysis": "15min",
+                    "analysis": "15 minutes city index",
                     "data": []
                     }
             
@@ -1279,7 +1501,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
                 publish_data["data"].append({
                     "workspace": f"{filename}_{category}",
                     "store_name": f"{filename}_{category}",
-                    "data_path": f"{parts}/{filename}.gpkg",
+                    "data_path": f"{parts}/{filename}.{output_format}",
                     "style_name": f"{category}",
                     "sld_path": f"{parts}/style/{category}.sld",
                     "write_on_catalogue": True,
@@ -1291,7 +1513,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
                 publish_data["data"].append({
                     "workspace": f"{filename}_{style_name}",
                     "store_name": f"{filename}_{style_name}",
-                    "data_path": f"{parts}/{style_name}.gpkg",
+                    "data_path": f"{parts}/{style_name}.{output_format}",
                     "style_name": f"{style_name}",
                     "sld_path": f"{poi_category_custom_style}",
                     "write_on_catalogue": True,
@@ -1306,52 +1528,14 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         return 0
 
                    
-def get_folder(local_path, output_minio_path, access_key, secret_key, endpoint_url):
-
-    if os.path.isfile(local_path):
-        # solo file singolo
-        filename = os.path.basename(local_path)
-        filepath = f"{output_minio_path}/{filename}"
-        upload_on_minio(local_path, filepath, access_key, secret_key, endpoint_url)
-    else:
-        # cartella: upload ricorsivo
-        for root, dirs, files in os.walk(local_path):
-            for file in files:
-                local_file = os.path.join(root, file)
-                rel_path = os.path.relpath(local_file, os.path.dirname(local_path))
-                filepath = f"{output_minio_path}/{rel_path}"
-                upload_on_minio(local_file, filepath, access_key, secret_key, endpoint_url)
-
-            
-            
-def upload_on_minio(local_file, filepath, access_key, secret_key,endpoint_url):
-
-    #bucket_name = "urbreath-public-repo"
-    parts = filepath.split("/", 1)
-    bucket_name = parts[0]
-    filepath = parts[1] if len(parts) > 1 else ""    
-
-
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=endpoint_url,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name="us-east-1"
-    )
-
-
-    #logger.info(f"[INFO] Uploading {local_file} → s3://{bucket_name}/{filepath}")
-
-    # ---- Upload file ----
-    s3.upload_file(local_file, bucket_name, filepath)
-
-    logger.info(f"[SUCCESS] Upload on MinIO completed!")
 
 
 
 
-def attach_centroids_to_network(centri, output_path_bbox, mode):
+
+def attach_centroids_to_network(centri, output_path_bbox, mode,output_minio_path, access_key,
+                secret_key,
+                endpoint_url):
     
     # --- 1. Leggi rete ---
     if mode == 'walk':
@@ -1359,8 +1543,28 @@ def attach_centroids_to_network(centri, output_path_bbox, mode):
     else:
         coefficiente = COEFFICIENT_BIKE
     
-           
-    nodes = pd.read_csv(f"{output_path_bbox}/osm_network/nodes.csv", index_col=0)
+
+    if access_key and secret_key and endpoint_url and is_minio_path(output_path_bbox):
+        
+        bucket_name, filepath_minio = split_path(output_minio_path)
+
+        s3 = get_s3_client(access_key, secret_key, endpoint_url)
+        obj = s3.get_object(
+            Bucket=bucket_name,
+            Key=f"{filepath_minio}/osm_network/nodes.csv"
+        )
+        nodes = pd.read_csv(BytesIO(obj["Body"].read()), index_col=0)
+        obj = s3.get_object(
+            Bucket=bucket_name,
+            Key=f"{filepath_minio}/osm_network/edges.csv"
+        )
+        #edges = pd.read_csv(BytesIO(obj["Body"].read()), index_col=[0,1])
+        edges = pd.read_csv(BytesIO(obj["Body"].read()))
+    else:
+        nodes = pd.read_csv(f"{output_path_bbox}/osm_network/nodes.csv", index_col=0)
+        edges = pd.read_csv(f"{output_path_bbox}/osm_network/edges.csv", index_col=[0,1]).reset_index()
+        
+    
 
     # converti nodes in GeoDataFrame
     nodes_gdf = geopandas.GeoDataFrame(
@@ -1376,7 +1580,7 @@ def attach_centroids_to_network(centri, output_path_bbox, mode):
     nodes['x'] = nodes_gdf.geometry.x
     nodes['y'] = nodes_gdf.geometry.y
 
-    edges = pd.read_csv(f"{output_path_bbox}/osm_network/edges.csv", index_col=[0,1]).reset_index()
+    
 
     # (deve essere in metri!)
     centri = centri.to_crs(CRS_3857)
@@ -1465,16 +1669,47 @@ def attach_centroids_to_network(centri, output_path_bbox, mode):
 
     nodes_to_save = nodes_4326.copy()
     nodes_to_save.index.name = 'id'
-    nodes_to_save = nodes_4326.drop(columns='geometry')
-
-    nodes_to_save.to_csv(
-        f"{output_path_bbox}/osm_network/nodes.csv"
-    )
+    nodes_to_save = nodes_to_save.drop(columns='geometry')
     edges_to_save = edges_updated[['u', 'v', 'length', 'time']]
+    logger.info(f"edges dtypes:\n{edges_updated[['u','v','length','time']].dtypes}")
+
+    if access_key and secret_key and endpoint_url and is_minio_path(output_path_bbox):
+        bucket_name, base_prefix = split_path(output_minio_path)
     
-    edges_to_save.to_csv(
-        f"{output_path_bbox}/osm_network/edges.csv",
-        index=False
-    )
-
-
+        s3 = get_s3_client(access_key, secret_key, endpoint_url)
+    
+        nodes_key = f"{base_prefix}/osm_network/nodes.csv"
+        edges_key = f"{base_prefix}/osm_network/edges.csv"
+    
+        # nodes.csv (con index)
+        buf_nodes = BytesIO()
+        nodes_to_save.to_csv(buf_nodes)  # mantiene index
+        buf_nodes.seek(0)
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=nodes_key,
+            Body=buf_nodes.getvalue(),
+            ContentType="text/csv"
+        )
+    
+        # edges.csv (senza index)
+        buf_edges = BytesIO()
+        edges_to_save.to_csv(buf_edges, index=False)
+        buf_edges.seek(0)
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=edges_key,
+            Body=buf_edges.getvalue(),
+            ContentType="text/csv"
+        )
+    
+    else:
+        nodes_to_save.to_csv(
+            f"{output_path_bbox}/osm_network/nodes.csv"
+        )
+        
+        
+        edges_to_save.to_csv(
+            f"{output_path_bbox}/osm_network/edges.csv",
+            index=False
+        )
