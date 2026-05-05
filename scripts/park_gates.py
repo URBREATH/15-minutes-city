@@ -1,208 +1,182 @@
-import os
-from qgis.core import *
-from qgis.analysis import QgsNativeAlgorithms
-from qgis.PyQt.QtCore import QVariant
-import processing
-from processing.core.Processing import Processing
+import geopandas as gpd
+import pandas as pd
+from shapely.geometry import Point, LineString
+from typing import Optional
+from scripts.logger import logger
+
+
+def _ensure_unique_id(gdf: gpd.GeoDataFrame, col: str = "unique_id") -> gpd.GeoDataFrame:
+    if gdf is None or gdf.empty:
+        return gdf
+    if col in gdf.columns:
+        return gdf
+    out = gdf.copy()
+    out[col] = range(1, len(out) + 1)
+    return out
+
+
+def _empty_gdf(columns, crs):
+    return gpd.GeoDataFrame(columns=columns, geometry="geometry", crs=crs)
+
+
+
+        
+def gates_a(
+    green: gpd.GeoDataFrame,
+    gates: gpd.GeoDataFrame,
+    id_green_area: str,
+    buffer_m: float = 10.0,
+    out_path: Optional[str] = None,
+    layer_name: str = "gates_a"
+) -> gpd.GeoDataFrame:
+
+    crs = green.crs if green is not None else None
+
+    if green is None or green.empty or gates is None or gates.empty:
+        return _empty_gdf(["unique_id", id_green_area, "GATE_A", "geometry"], crs)
+
+    green = _ensure_unique_id(green, col=id_green_area)
+
+    # buffer sui parchi
+    green_buf = green[[id_green_area, "geometry"]].copy()
 
    
-class GatesA(QgsProcessingAlgorithm):
-    def initAlgorithm(self, config=None):
-        self.addParameter(QgsProcessingParameterVectorLayer('green_areas', 'green_areas', types=[QgsProcessing.TypeVectorAnyGeometry]))
-        self.addParameter(QgsProcessingParameterVectorLayer('gate_osm', 'Gate_OSM', types=[QgsProcessing.TypeVectorPoint]))
-        self.addParameter(QgsProcessingParameterField('id_green_area', 'Campo ID univoco', type=QgsProcessingParameterField.Any))
-        self.addParameter(QgsProcessingParameterNumber('park_gates_osm_buffer_m', 'Buffer gate_osm', type=QgsProcessingParameterNumber.Double, defaultValue=10))
-        self.addParameter(QgsProcessingParameterFeatureSink('Gates', 'Gates', type=QgsProcessing.TypeVectorAnyGeometry, createByDefault=True))
+    green_buf["geometry"] = green_buf.geometry.buffer(float(buffer_m))
 
-    def processAlgorithm(self, parameters, context, feedback):
-        feedback = QgsProcessingMultiStepFeedback(4, feedback)
-        results = {}
-        outputs = {}
+    # punti entro buffer
+    sel = gpd.sjoin(gates, green_buf, predicate="within", how="inner")
+    if sel.empty:
+        return _empty_gdf(["unique_id", id_green_area, "GATE_A", "geometry"], crs)
 
-        id_green_area = parameters['id_green_area']
-        buffer_m = parameters['park_gates_osm_buffer_m']
-        temp_dir = os.path.join(QgsProject.instance().homePath(), "temp_gates")
-        temp_gateVicini = os.path.join(temp_dir, "gateVicini.gpkg")
-        temp_gateJoin = os.path.join(temp_dir, "gateJoin.gpkg")
-        temp_gateA = os.path.join(temp_dir, "gateA.gpkg")
-        # Estrai punti gate vicino ai parchi
-        alg_params = {
-            'DISTANCE': buffer_m,
-            'INPUT': parameters['gate_osm'],
-            'REFERENCE': parameters['green_areas'],
-            'OUTPUT': temp_gateVicini
-        }
-        outputs['GateVicini'] = processing.run('native:extractwithindistance', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+    sel = sel.drop(columns=[c for c in sel.columns if c.startswith("index_")], errors="ignore")
 
-        feedback.setCurrentStep(1)
-        if feedback.isCanceled(): return {}
+    # nearest join
+    nearest = gpd.sjoin_nearest(
+        sel,
+        green[[id_green_area, "geometry"]],
+        how="left",
+        max_distance=float(buffer_m)
+    )
 
-        # Join con parchi
-        alg_params = {
-            'DISCARD_NONMATCHING': False,
-            'FIELDS_TO_COPY': [''],
-            'INPUT': outputs['GateVicini']['OUTPUT'],
-            'INPUT_2': parameters['green_areas'],
-            'MAX_DISTANCE': None,
-            'NEIGHBORS': 1,
-            'PREFIX': None,
-            'OUTPUT': temp_gateJoin
-        }
-        outputs['GateJoin'] = processing.run('native:joinbynearest', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        feedback.setCurrentStep(2)
-        if feedback.isCanceled(): return {}
+    def _gate_a(row):
+        barrier = str(row.get("barrier") or "").strip().lower()
+        entrance = str(row.get("entrance") or "").strip().lower()
+    
+        if barrier in ("gate", "entrance") or entrance == "yes":
+            return "A"
+        return None
 
-        # Aggiungi campo GATE_A
-        alg_params = {
-            'FIELD_LENGTH': 10,
-            'FIELD_NAME': 'GATE_A',
-            'FIELD_TYPE': 2,
-            'FIELD_PRECISION': 0,
-            'FORMULA': "if (\"barrier\" = 'gate' OR \"entrance\" = 'yes' OR \"barrier\" = 'entrance', 'A', NULL)",
-            'INPUT': outputs['GateJoin']['OUTPUT'],
-            'OUTPUT': temp_gateA
-        }
-        outputs['CalcolatoreGateA'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        feedback.setCurrentStep(3)
-        if feedback.isCanceled(): return {}
+    nearest["GATE_A"] = nearest.apply(_gate_a, axis=1)
+    nearest = _ensure_unique_id(nearest, col="unique_id")
 
-        # Salva layer finale con campi principali
-        final_params = {
-            'INPUT': outputs['CalcolatoreGateA']['OUTPUT'],
-            'FIELDS': ['unique_id', 'GATE_A'],
-            'OUTPUT': parameters['Gates']
-        }
-        processing.run('native:retainfields', final_params, context=context, feedback=feedback, is_child_algorithm=True)
-        results['Gates'] = parameters['Gates']
-        return results
+    out = gpd.GeoDataFrame(
+        nearest[["unique_id", id_green_area, "GATE_A", "geometry"]],
+        geometry="geometry",
+        crs=crs
+    )
 
-    def name(self): return 'gates_a'
-    def displayName(self): return 'Gates A'
-    def group(self): return ''
-    def groupId(self): return ''
-    def createInstance(self): return GatesA()
+    return out
+    
+def gates_b(
+    green: gpd.GeoDataFrame,
+    streets: gpd.GeoDataFrame,
+    id_green_area: str,
+    out_path: Optional[str] = None,
+    layer_name: str = "gates_b"
+) -> gpd.GeoDataFrame:
+
+    crs = green.crs if green is not None else None
+
+    if green is None or green.empty or streets is None or streets.empty:
+        return _empty_gdf([id_green_area, "GATE_B", "geometry"], crs)
+
+    green = _ensure_unique_id(green, col=id_green_area)
+
+    boundaries = green[[id_green_area, "geometry"]].copy()
+    boundaries["geometry"] = boundaries.geometry.boundary
+    boundaries = boundaries[~boundaries.geometry.is_empty & boundaries.geometry.notna()]
+
+    if boundaries.empty:
+        return _empty_gdf([id_green_area, "GATE_B", "geometry"], crs)
+
+    streets_sel = gpd.sjoin(
+        streets,
+        green[[id_green_area, "geometry"]],
+        predicate="intersects",
+        how="inner"
+    )
+
+    if streets_sel.empty:
+        return _empty_gdf([id_green_area, "GATE_B", "geometry"], crs)
+
+    streets_sel = streets_sel.drop(columns=[c for c in streets_sel.columns if c.startswith("index_")], errors="ignore")
+
+    inter = gpd.overlay(streets_sel, boundaries, how="intersection", keep_geom_type=False)
+    inter = inter[inter.geometry.type.isin(["Point", "MultiPoint"])].explode(index_parts=False)
+
+    if inter.empty:
+        return _empty_gdf([id_green_area, "GATE_B", "geometry"], crs)
+
+    inter["GATE_B"] = "B"
+
+    out = gpd.GeoDataFrame(
+        inter[[id_green_area, "GATE_B", "geometry"]],
+        geometry="geometry",
+        crs=crs
+    )
+
+    return out
     
     
-class GatesB(QgsProcessingAlgorithm):
-    def initAlgorithm(self, config=None):
-        self.addParameter(QgsProcessingParameterVectorLayer('green_areas', 'green_areas', types=[QgsProcessing.TypeVectorAnyGeometry]))
-        self.addParameter(QgsProcessingParameterVectorLayer('streets', 'streets', types=[QgsProcessing.TypeVectorAnyGeometry]))
-        self.addParameter(QgsProcessingParameterField('id_green_area', 'Campo ID univoco', type=QgsProcessingParameterField.Any))
-        self.addParameter(QgsProcessingParameterFeatureSink('Gates', 'Gates', type=QgsProcessing.TypeVectorAnyGeometry, createByDefault=True))
+def _points_along_line(line: LineString, step: float) -> list[Point]:
+    if line.is_empty or line.length == 0:
+        return []
+    d = 0.0
+    pts = []
+    while d < line.length:
+        pts.append(line.interpolate(d))
+        d += step
+    pts.append(line.interpolate(line.length))
+    return pts
 
-    def processAlgorithm(self, parameters, context, feedback):
-        feedback = QgsProcessingMultiStepFeedback(3, feedback)
-        results = {}
-        outputs = {}
 
-        id_green_area = parameters['id_green_area']
+def gates_c(
+    green: gpd.GeoDataFrame,
+    id_green_area: str,
+    distance_m: float = 100.0,
+    out_path: Optional[str] = None,
+    layer_name: str = "gates_c"
+) -> gpd.GeoDataFrame:
 
-        temp_dir = os.path.join(QgsProject.instance().homePath(), "temp_gates")
-        temp_streetsNga = os.path.join(temp_dir, "streetsNga.gpkg")
-        temp_polygon = os.path.join(temp_dir, "polygon.gpkg")
-        temp_gateB = os.path.join(temp_dir, "gateB.gpkg")
-        
-        # Streets ∩ Green Areas
-        alg_params = {
-            'INPUT': parameters['streets'],
-            'INTERSECT': parameters['green_areas'],
-            'PREDICATE': [0,1,7],
-            'OUTPUT': temp_streetsNga
-        }
-        outputs['EstraiPosizione'] = processing.run('native:extractbylocation', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        feedback.setCurrentStep(1)
-        if feedback.isCanceled(): return {}
+    crs = green.crs if green is not None else None
+    logger.info('sono qui')
+    if green is None or green.empty:
+        return _empty_gdf([id_green_area, "GATE_C", "geometry"], crs)
 
-        # Linee dai bordi dei poligoni green
-        alg_params = {
-            'INPUT': parameters['green_areas'],
-            'OUTPUT': temp_polygon
-        }
-        outputs['DaPoligoniALinee'] = processing.run('native:polygonstolines', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        feedback.setCurrentStep(2)
-        if feedback.isCanceled(): return {}
+    green = _ensure_unique_id(green, col=id_green_area)
 
-        # Intersezione linee streets → Gate B
-        alg_params = {
-            'INPUT': outputs['EstraiPosizione']['OUTPUT'],
-            'INTERSECT': outputs['DaPoligoniALinee']['OUTPUT'],
-            'OUTPUT': temp_gateB
-        }
-        outputs['Gate_b'] = processing.run('native:lineintersections', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        feedback.setCurrentStep(3)
-        if feedback.isCanceled(): return {}
+    boundaries = green[[id_green_area, "geometry"]].copy()
+    boundaries["geometry"] = boundaries.geometry.boundary
+    boundaries = boundaries[~boundaries.geometry.is_empty & boundaries.geometry.notna()]
 
-        # Calcola campo GATE_B
-        alg_params = {
-            'FIELD_LENGTH': 10,
-            'FIELD_NAME': 'GATE_B',
-            'FIELD_TYPE': 2,
-            'FIELD_PRECISION': 0,
-            'FORMULA': "'B'",
-            'INPUT': outputs['Gate_b']['OUTPUT'],
-            'OUTPUT': parameters['Gates']
-        }
-        outputs['CalcolatoreGateB'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        results['Gates'] = outputs['CalcolatoreGateB']['OUTPUT']
-        return results
+    records = []
+    for _, row in boundaries.iterrows():
+        gid = row[id_green_area]
+        geom = row.geometry
 
-    def name(self): return 'gates_b'
-    def displayName(self): return 'Gates B'
-    def group(self): return ''
-    def groupId(self): return ''
-    def createInstance(self): return GatesB()
-    
-class GatesC(QgsProcessingAlgorithm):
-    def initAlgorithm(self, config=None):
-        self.addParameter(QgsProcessingParameterVectorLayer('green_areas', 'green_areas', types=[QgsProcessing.TypeVectorAnyGeometry]))
-        self.addParameter(QgsProcessingParameterNumber('park_gates_virtual_distance_m', 'Distanza Gate Virtuale', type=QgsProcessingParameterNumber.Double, defaultValue=100))
-        self.addParameter(QgsProcessingParameterFeatureSink('Gates', 'Gates', type=QgsProcessing.TypeVectorAnyGeometry, createByDefault=True))
+        if geom.geom_type == "LineString":
+            lines = [geom]
+        elif geom.geom_type == "MultiLineString":
+            lines = list(geom.geoms)
+        else:
+            continue
 
-    def processAlgorithm(self, parameters, context, feedback):
-        feedback = QgsProcessingMultiStepFeedback(2, feedback)
-        results = {}
-        outputs = {}
+        for ln in lines:
+            for p in _points_along_line(ln, float(distance_m)):
+                records.append({id_green_area: gid, "GATE_C": "C", "geometry": p})
 
-        park_gates_virtual_distance_m = parameters['park_gates_virtual_distance_m']
-        temp_dir = os.path.join(QgsProject.instance().homePath(), "temp_gates")
-        temp_poltolines = os.path.join(temp_dir, "poltolines.gpkg")
-        temp_pointalonglines = os.path.join(temp_dir, "pointalonglines.gpkg")
-        
-        # Da poligoni a linee
-        alg_params = {
-            'INPUT': parameters['green_areas'],
-            'OUTPUT': temp_poltolines
-        }
-        outputs['DaPoligoniALinee'] = processing.run('native:polygonstolines', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        feedback.setCurrentStep(1)
-        if feedback.isCanceled(): return {}
+    if not records:
+        return _empty_gdf([id_green_area, "GATE_C", "geometry"], crs)
 
-        # Punti lungo linee
-        alg_params = {
-            'DISTANCE': park_gates_virtual_distance_m,
-            'START_OFFSET': 0,
-            'END_OFFSET': 0,
-            'INPUT': outputs['DaPoligoniALinee']['OUTPUT'],
-            'OUTPUT': temp_pointalonglines
-        }
-        outputs['Gate_c'] = processing.run('native:pointsalonglines', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-
-        # Calcola campo GATE_C
-        alg_params = {
-            'FIELD_LENGTH': 10,
-            'FIELD_NAME': 'GATE_C',
-            'FIELD_TYPE': 2,
-            'FIELD_PRECISION': 0,
-            'FORMULA': "'C'",
-            'INPUT': outputs['Gate_c']['OUTPUT'],
-            'OUTPUT': parameters['Gates']
-        }
-        outputs['CalcolatoreGateC'] = processing.run('native:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        results['Gates'] = outputs['CalcolatoreGateC']['OUTPUT']
-        return results
-
-    def name(self): return 'gates_c'
-    def displayName(self): return 'Gates C'
-    def group(self): return ''
-    def groupId(self): return ''
-    def createInstance(self): return GatesC()
+    out = gpd.GeoDataFrame(records, geometry="geometry", crs=crs)
+    return out
