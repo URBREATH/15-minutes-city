@@ -13,4 +13,4 @@ beautifulsoup4
 OSMPythonTools
 boto3
 geovoronoi
-pydantic
+s3transfer
