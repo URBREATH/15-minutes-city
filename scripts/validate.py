@@ -6,13 +6,14 @@ import pandas as pd
 import json
 import warnings
 import traceback
-
+from pyproj import CRS
+from pyproj.exceptions import CRSError
 from scripts.errors import raise_error
-from scripts.index_processing import create_bbox, download, computo
 from scripts.parameters import read_param, section_exists_and_has_fields
 import logging
 from logging.handlers import RotatingFileHandler
 from scripts.logger import logger
+from scripts.storage_minio import check_path_exists,split_path,get_s3_client,minio_file_exists,minio_copy_prefix,minio_list_poi_categories,is_minio_path,split_bucket_and_prefix,load_pois_from_minio
 
 def validate_api_params(params: dict):
 
@@ -50,7 +51,7 @@ def validate_api_params(params: dict):
         endpoint_url = os.getenv("MINIO_ENDPOINT_URL")
         if not access_key or not secret_key or not endpoint_url:
             raise_error("ERR_004")
-
+    
     # ENUM validation
     weight = execution.get("weight") or "time"
     if weight not in ["time", "distance"]:
@@ -90,14 +91,21 @@ def validate_api_params(params: dict):
             raise_error("ERR_009", extra="custom categories count must match CSV categories count")
 
     # STYLE CONTROLS
+    
     if custom_styles:
         if not custom_csvs:
             raise_error("ERR_010")
+    
         if len(custom_styles) > len(custom_csvs):
             raise_error("ERR_011")
+    
         for s in custom_styles:
-            if not os.path.isfile(s):
-                raise_error("ERR_012", extra=s)
+            if is_minio_path(s):
+                check_path_exists(s, "ERR_012", endpoint_url, access_key, secret_key)
+            else:
+                if not os.path.isfile(s):
+                    raise_error("ERR_012", extra=s)
+    
 
     # -------------------
     # PARK
@@ -108,27 +116,65 @@ def validate_api_params(params: dict):
         raise_error("ERR_013", extra=f"{'| '.join(valid_park_source)}")
 
     park_csv = (park.get("park_gates_csv") or "").strip()
+    
     if park_source == "csv":
-        if not park_csv or not os.path.isfile(park_csv):
+        if not park_csv:
             raise_error("ERR_014", extra=park_csv)
+    
+        if is_minio_path(park_csv):
+            check_path_exists(park_csv, "ERR_014", endpoint_url, access_key, secret_key)
+        else:
+            if not os.path.isfile(park_csv):
+                raise_error("ERR_014", extra=park_csv)
+
 
     # CSV existence check
     if custom_names or custom_csvs:
         for f in custom_csvs:
-            if not os.path.exists(f):
-                raise_error("ERR_015", extra=f)
+            if is_minio_path(f):
+                check_path_exists(f, "ERR_015", endpoint_url, access_key, secret_key)
+            else:
+                if not os.path.exists(f):
+                    raise_error("ERR_015", extra=f)
 
     # -------------------
     # GRID
     # -------------------
     clip_layer = grid.get("clip_layer")
-    if clip_layer and not os.path.exists(clip_layer):
-        raise_error("ERR_016", extra=clip_layer)
+    
+    
+    if clip_layer:
+        if is_minio_path(clip_layer):            
+            check_path_exists(clip_layer, "ERR_016", endpoint_url, access_key, secret_key)
+        else:
+            if not os.path.exists(clip_layer):
+                raise_error("ERR_016", extra=clip_layer)
 
     grid_gpkg = grid.get("grid_gpkg")
-    if grid_gpkg and not os.path.exists(grid_gpkg):
-        raise_error("ERR_017", extra=grid_gpkg)
+    
+    if grid_gpkg:
+        if is_minio_path(grid_gpkg):
+            check_path_exists(grid_gpkg, "ERR_017", endpoint_url, access_key, secret_key)
+        else:
+            if not os.path.exists(grid_gpkg):
+                raise_error("ERR_017", extra=grid_gpkg)
 
+    
+    output_format = execution.get('output_format') or 'gpkg'
+    output_epsg = execution.get('output_epsg') or '3857'
+    if output_format not in ["csv", "gpkg", "geojson"]:
+        raise_error("ERR_018", extra= "csv | gpkg | geojson")
+    
+    
+    try:
+        CRS.from_epsg(int(output_epsg))
+    except (CRSError, ValueError, TypeError):
+        raise_error(
+            "ERR_019",
+            extra="must be a valid EPSG code (e.g., 3857, 4326, 32632)"
+        )
+
+        
     return params
     
     
@@ -223,18 +269,19 @@ def validate_parameters(parameters_file):
     # --- STYLE CONTROLS ---
     
     if custom_styles:
-        # must have at least one csv
         if not custom_csvs:
             raise_error("ERR_010")
     
-        # styles cannot exceed csv count
         if len(custom_styles) > len(custom_csvs):
             raise_error("ERR_011")
     
-        # each style must exist
         for s in custom_styles:
-            if not os.path.isfile(s):
-                raise_error("ERR_012", extra=s)
+            if is_minio_path(s):
+                check_path_exists(s, "ERR_012", endpoint_url, access_key, secret_key)
+            else:
+                if not os.path.isfile(s):
+                    raise_error("ERR_012", extra=s)
+    
                 
        
     # ---------------- PARK ----------------                                                                             
@@ -252,17 +299,23 @@ def validate_parameters(parameters_file):
     park_csv = park_parameters.get('park_gates_csv', '').strip()
 
     if park_source == "csv":
-
         if not park_csv:
             raise_error("ERR_014", extra=park_csv)
-        
-        if not os.path.isfile(park_csv):
-            raise_error("ERR_014", extra=park_csv)
     
+        if is_minio_path(park_csv):
+            check_path_exists(park_csv, "ERR_014", endpoint_url, access_key, secret_key)
+        else:
+            if not os.path.isfile(park_csv):
+                raise_error("ERR_014", extra=park_csv)
+
+    # CSV existence check
     if custom_names or custom_csvs:
         for f in custom_csvs:
-            if not os.path.exists(f):
-                raise_error("ERR_015", extra=f)
+            if is_minio_path(f):
+                check_path_exists(f, "ERR_015", endpoint_url, access_key, secret_key)
+            else:
+                if not os.path.exists(f):
+                    raise_error("ERR_015", extra=f)
 
     try:
         grid_parameters = read_param(parameters_file, 'grid')
@@ -270,12 +323,35 @@ def validate_parameters(parameters_file):
         grid_parameters = {}
 
     clip_layer = grid_parameters.get('clip_layer')
-    if clip_layer and not os.path.exists(clip_layer):
-        raise_error("ERR_016", extra=clip_layer)
-        
+
+    if clip_layer:
+        if is_minio_path(clip_layer):
+            check_path_exists(clip_layer, "ERR_016", endpoint_url, access_key, secret_key)
+        else:
+            if not os.path.exists(clip_layer):
+                raise_error("ERR_016", extra=clip_layer)        
     grid_gpkg = grid_parameters.get('grid_gpkg')
-    if grid_gpkg and not os.path.exists(grid_gpkg):
-        raise_error("ERR_017", extra=grid_gpkg)                                                  
+    if grid_gpkg:
+        if is_minio_path(grid_gpkg):
+            check_path_exists(grid_gpkg, "ERR_017", endpoint_url, access_key, secret_key)
+        else:
+            if not os.path.exists(grid_gpkg):
+                raise_error("ERR_017", extra=grid_gpkg)                                                
+    
+    output_format = execution_parameters.get('output_format') or 'gpkg'
+    output_epsg = execution_parameters.get('output_epsg') or '3857'
+    if output_format not in ["csv", "gpkg", "geojson"]:
+        raise_error("ERR_018", extra= "csv | gpkg | geojson")
+   
+    
+    try:
+        CRS.from_epsg(int(output_epsg))
+    except (CRSError, ValueError, TypeError):
+        raise_error(
+            "ERR_019",
+            extra="must be a valid EPSG code (e.g., 3857, 4326, 32632)"
+        )
+
 
     return {
         "aoi": aoi_parameters,
