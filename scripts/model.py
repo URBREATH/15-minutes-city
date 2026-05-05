@@ -12,14 +12,17 @@ class Execution(BaseModel):
     weight: str = "time"
     mode: str = "walk"
     walk_speed_kmh: float = 5.0
-    bike_speed_kmh: float = 15.0
-    sld_osm_style_path: Optional[str] = None
+    bike_speed_kmh: float = 15.0   
+    output_format: str = "gpkg"
+    output_EPSG: str = "3857"
+
 
 
 class POI(BaseModel):
     poi_category_osm: Optional[str] = None
     poi_category_custom_name: Optional[str] = None
     poi_category_custom_csv: Optional[str] = None
+    poi_category_custom_style: Optional[str] = None
 
 
 class Park(BaseModel):
