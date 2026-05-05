@@ -1,25 +1,52 @@
-# Base image
-FROM continuumio/miniconda3
 
-# Install git
+# Base image
+FROM docker.io/continuumio/miniconda3:latest
+
+# (Opzionale) pacchetti utili
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
-# Create the conda environment with python and qgis
-RUN conda create -n geo_indicators python=3.9 qgis gdal -c conda-forge -y
+# Crea env e installa TUTTO con conda-forge (evita pip che compila numpy/scipy)
 
-# Set the shell to run within the conda environment
-SHELL ["conda", "run", "-n", "geo_indicators", "/bin/bash", "-c"]
+RUN conda update -n base -c defaults conda -y && \
+    conda install -n base -c conda-forge mamba -y && \
+    conda config --set channel_priority strict && \
+    mamba create -n geo_indicators -y -c conda-forge \
+      python=3.9 \
+      gdal \
+      flask \
+      pandas \
+      geopandas \
+      scipy \
+      "numpy<2" \
+      pydantic=1.10 \
+      typing_extensions \
+      ujson \
+      soupsieve \
+      geojson \
+      botocore && \
+    conda clean -afy
 
-# Set working directory
+
+# Rende l'env "attivo" per i RUN successivi senza usare SHELL (Podman OCI friendly)
+ENV CONDA_DEFAULT_ENV=geo_indicators
+ENV PATH=/opt/conda/envs/geo_indicators/bin:$PATH
+
 WORKDIR /app
 
-# Copy and install requirements
+# Se vuoi tenere requirements.txt, installa SOLO eventuali pacchetti extra
+# (e NON far reinstallare dipendenze già messe da conda)
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir --no-deps -r requirements.txt || true
 
-# Copy the rest of the application
+# Copia app
 COPY . .
 
-# Expose port and run the application
 EXPOSE 5000
-CMD ["conda", "run", "-n", "geo_indicators", "python", "main_15min_api.py"]
+
+# Avvio API (dentro env conda)
+
+ENV CONDA_DEFAULT_ENV=geo_indicators
+ENV PATH=/opt/conda/envs/geo_indicators/bin:$PATH
+ENV PYTHONUNBUFFERED=1
+
+CMD ["/opt/conda/envs/geo_indicators/bin/python", "main_15min_api.py"]
