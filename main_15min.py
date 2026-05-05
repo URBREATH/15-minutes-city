@@ -98,7 +98,10 @@ def run_analysis(params: dict):
     
         "bike_speed_kmh": execution.get('bike_speed_kmh') or 15.0,
         "walk_speed_kmh": execution.get('walk_speed_kmh') or 5.0,
-    
+
+        "output_format": execution.get('output_format') or 'gpkg',
+        "output_epsg": execution.get('output_epsg') or '3857',
+            
         "poi_category_osm": poi_category_osm,
         "custom_names": custom_names,
         "custom_csvs": custom_csvs,
@@ -173,29 +176,32 @@ def run_analysis(params: dict):
     # ------------------------------------------------
     t0_computo = print_start("EXECUTION")
 
-    computo(
-        bbox_tassello,
-        tile.at[0, 'latitude'],
-        tile.at[0, 'longitude'],
-        tile.at[0, 'hex_radius_m'],
-        execution.get('output_local_path'),
-        custom_names,
-        custom_csvs,
-        grid.get('grid_gpkg'),
-        poi_category_osm,
-        grid.get('clip_layer'),
-        execution.get('filename'),
-        access_key,
-        secret_key,
-        endpoint_url,
-        execution.get('poi_category_custom_style'),
-        new_path_output_minio_path,
-        grid.get("virtual_nodes", "false").strip().lower() == "true",
-        execution.get('bike_speed_kmh') or 15.0,
-        execution.get('walk_speed_kmh') or 5.0,
-        execution.get('mode') or 'walk',
-        execution.get('weight') or 'time'
-    )
+        
+    #computo(
+    #    bbox_tassello,
+    #    tile.at[0, 'latitude'],
+    #    tile.at[0, 'longitude'],
+    #    tile.at[0, 'hex_radius_m'],
+    #    execution.get('output_local_path'),
+    #    custom_names,
+    #    custom_csvs,
+    #    grid.get('grid_gpkg'),
+    #    poi_category_osm,
+    #    grid.get('clip_layer'),
+    #    execution.get('filename'),
+    #    access_key,
+    #    secret_key,
+    #    endpoint_url,
+    #    execution.get('poi_category_custom_style'),
+    #    new_path_output_minio_path,
+    #    grid.get("virtual_nodes", "false").strip().lower() == "true",
+    #    execution.get('output_format') or 'gpkg',
+    #    execution.get('output_epsg') or '3857',
+    #    execution.get('bike_speed_kmh') or 15.0,
+    #    execution.get('walk_speed_kmh') or 5.0,
+    #    execution.get('mode') or 'walk',
+    #    execution.get('weight') or 'time'
+    #)
 
     print_end("EXECUTION", t0_computo)
 
