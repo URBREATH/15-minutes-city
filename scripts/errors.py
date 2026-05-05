@@ -29,7 +29,9 @@ ERRORS = {
     "ERR_014": "park_gates_csv missing or invalid",
     "ERR_015": "poi_category_custom_csv not found",
     "ERR_016": "clip_layer not found",
-    "ERR_017": "grid_gpkg not found"    
+    "ERR_017": "grid_gpkg not found"  ,
+    "ERR_018": "Invalid parameter value output_format",
+    "ERR_019": "Invalid parameter value output_EPSG"       
 }
 
 
