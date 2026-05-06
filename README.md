@@ -124,12 +124,12 @@ The API version required a ```parameters.json``` file:
 ```
 {
   "aoi": {
-    "bbox":
+    "bbox": null
   },
   "execution": {
-    "output_local_path": ,
+    "output_local_path": null,
     "output_minio_path": null,
-    "filename":  ,
+    "filename": null,
     "weight": "time",
     "mode": "walk",
     "walk_speed_kmh": 5.0,
