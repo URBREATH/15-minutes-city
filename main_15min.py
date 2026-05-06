@@ -149,10 +149,10 @@ def run_analysis(params: dict):
     bbox_file = os.path.join(grid_folder, "grid_parameter.csv")
     tile = pd.read_csv(bbox_file, sep=';', header=0)
 
-    bbox_tassello = tile.at[0, 'downloadBBox']
+    aoi_bbox = tile.at[0, 'downloadBBox']
 
     download(
-        bbox_tassello,
+        aoi_bbox,
         execution.get('output_local_path'),
         custom_names,
         custom_csvs,
@@ -178,7 +178,7 @@ def run_analysis(params: dict):
 
         
     #computo(
-    #    bbox_tassello,
+    #    aoi_bbox,
     #    tile.at[0, 'latitude'],
     #    tile.at[0, 'longitude'],
     #    tile.at[0, 'hex_radius_m'],
