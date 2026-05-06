@@ -82,7 +82,7 @@ bbox = [lat_min, lon_min, lat_max, lon_max] in EPSG:4326 defines the area of int
 [execution]
 output_local_path = path folder
 output_minio_path = path folder on MINIO
-filename = <area of interest>_15min_<osm or local_data> 
+filename = name of the output file 
 weight = time | distance
 mode = walk | bike
 walk_speed_kmh =  walking speed (default = 5.0 Km/h)  
@@ -124,18 +124,18 @@ The API version required a ```parameters.json``` file:
 ```
 {
   "aoi": {
-    "bbox":[lat_min, lon_min, lat_max, lon_max] in EPSG:4326 defines the area of interest 
+    "bbox":
   },
   "execution": {
-    "output_local_path": path folder,
+    "output_local_path": ,
     "output_minio_path": null,
-    "filename":  <area of interest>_15min_<osm or local_data>,
+    "filename":  ,
     "weight": "time",
     "mode": "walk",
     "walk_speed_kmh": 5.0,
     "bike_speed_kmh": 15.0,
-    "output_format":,
-    "output_EPSG":
+    "output_format": null,
+    "output_EPSG": null
   },
   "poi": {
     "poi_category_osm": "all",
