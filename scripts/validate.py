@@ -265,6 +265,12 @@ def validate_api_params(params: dict):
                 extra="must be a valid EPSG code (e.g., 3857, 4326, 32632)"
             )
 
+    # GeoJSON must be EPSG:4326
+    if output_format == "geojson" and output_epsg and int(output_epsg) != 4326:
+        raise_error(
+            "ERR_024",
+            extra=output_epsg
+        )
         
     return params
     
@@ -537,7 +543,13 @@ def validate_parameters(parameters_file):
                 extra="must be a valid EPSG code (e.g., 3857, 4326, 32632)"
             )
 
-
+    # GeoJSON must be EPSG:4326
+    if output_format == "geojson" and output_epsg and int(output_epsg) != 4326:
+        raise_error(
+            "ERR_024",
+            extra=output_epsg
+        )
+        
     return {
         "aoi": aoi_parameters,
         "poi": poi_parameters,
