@@ -290,8 +290,18 @@ def run_analysis(params: dict):
     logger.info("")
     logger.info(f"[{ts()}] SCRIPT ENDS ( {dt:.2f}s = {dt/60:.2f}m = {dt/3600:.2f}h)")
     logger.info("=============================================================================================")
+    if new_path_output_minio_path:
+   
+        result_path = f"s3://{new_path_output_minio_path}/output/{filename}.{output_format}"
+    else:
+    # CLI 
+        result_path = os.path.join(
+            output_local_path,
+            "output",
+            f"{filename}.{output_format}"
+        )
     return {
-        "result_path": f"{new_path_output_minio_path}/output/{filename}.{output_format}"
+        "result_path": result_path
     }
 
 
