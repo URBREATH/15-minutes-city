@@ -25,17 +25,22 @@ def execute():
     
     # Capture the stdout
     output_buffer = io.StringIO() 
-    with contextlib.redirect_stdout(output_buffer):
-        try:
-            params = validate_api_params(params)
-       
-            run_analysis(params)
-        except Exception as e:
-            print(f"An error occurred during execution: {e}")
 
-    output = output_buffer.getvalue()
-    
-    return output, 200
+    try:
+        with contextlib.redirect_stdout(output_buffer):
+            params = validate_api_params(params)
+            result = run_analysis(params)   
+
+        return jsonify({
+            "status": "ok",
+            "result_path": result["result_path"]
+        }), 200
+
+    except BaseException as e:
+        return jsonify({
+            "error": str(e)
+        }), 400
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', threaded=True)
