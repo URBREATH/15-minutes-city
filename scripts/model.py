@@ -9,13 +9,13 @@ class AOI(BaseModel):
 class Execution(BaseModel):
     output_local_path: str
     output_minio_path: Optional[str] = None
-    filename: Optional[str] = None
-    weight: str = "time"
-    mode: str = "walk"
-    walk_speed_kmh: float = 5.0
-    bike_speed_kmh: float = 15.0
-    output_format: str = "gpkg"
-    output_epsg: int = 3857
+    filename: str = None
+    weight: Optional[str] = "time"
+    mode: Optional[str] = "walk"
+    walk_speed_kmh: Optional[float] = 5.0
+    bike_speed_kmh: Optional[float] = 15.0
+    output_format: Optional[str] = "gpkg"
+    output_epsg: Optional[int] = 3857
 
 
 class Network(BaseModel):
@@ -33,14 +33,14 @@ class POI(BaseModel):
 
 class Park(BaseModel):
     park_gates_source: Optional[str] = None
-    park_gates_osm_buffer_m: float = 10.0
+    park_gates_osm_buffer_m: Optional[float] = 10.0
     park_gates_csv: Optional[str] = None
     park_gates_virtual_distance_m: float = 100.0
 
 
 class Grid(BaseModel):
     grid_gpkg: Optional[str] = None
-    hex_diameter_m: int = 250
+    hex_diameter_m: Optional[int] = 250
     clip_layer: Optional[str] = None
 
 
