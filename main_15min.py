@@ -30,7 +30,7 @@ default_weight =  'time'
 default_bike_speed_kmh = 15.0
 default_walk_speed_kmh = 5.0
 default_output_format ='gpkg'
-default_output_epsg = '3857'
+default_output_epsg = 3857
 default_network_edges = ''
 default_network_nodes =''
 default_poi_osm_path =  ''
@@ -290,6 +290,9 @@ def run_analysis(params: dict):
     logger.info("")
     logger.info(f"[{ts()}] SCRIPT ENDS ( {dt:.2f}s = {dt/60:.2f}m = {dt/3600:.2f}h)")
     logger.info("=============================================================================================")
+    return {
+        "result_path": f"{new_path_output_minio_path}/output/{filename}.{output_format}"
+    }
 
 
 
