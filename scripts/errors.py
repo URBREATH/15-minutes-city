@@ -35,7 +35,8 @@ ERRORS = {
     "ERR_020": "Invalid parameter value poi_osm_path" ,
     "ERR_021": "Invalid parameter value network_nodes" ,
     "ERR_022": "Invalid parameter value network_edges" ,
-    "ERR_023": "network_nodes and network_edges must be specified together"
+    "ERR_023": "network_nodes and network_edges must be specified together",
+    "ERR_024": "GeoJSON output must use EPSG:4326"
 }
 
 
@@ -69,4 +70,4 @@ def raise_error(code, extra=None, exit_code=1):
     logger.info("--------------------------------------------------------------------------------")
 
     # Stop script execution
-    sys.exit(exit_code)
+    sys.exit(f"{code}: {message}" + (f" | {extra}" if extra else ""))
