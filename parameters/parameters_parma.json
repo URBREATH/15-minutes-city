@@ -13,14 +13,19 @@
     "output_format": "",
     "output_epsg": null
   },
+  "network": {
+    "network_edges": "",
+    "network_nodes": ""
+  },
   "poi": {
-    "poi_category_osm": "health",
+    "poi_category_osm": "all",
+	"poi_osm_path": "",
     "poi_category_custom_name": null,
     "poi_category_custom_csv": null,
     "poi_category_custom_style": null
   },
   "park": {
-    "park_gates_source": "osm",
+    "park_gates_source": "",
     "park_gates_osm_buffer_m": 10.0,
     "park_gates_csv": null,
     "park_gates_virtual_distance_m": 100.0
