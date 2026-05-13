@@ -1,16 +1,16 @@
+FROM docker.io/condaforge/miniforge3:23.11.0-0
 
-# Base image
-FROM docker.io/continuumio/miniconda3:latest
-
-# (Opzionale) pacchetti utili
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
-# Crea env e installa TUTTO con conda-forge (evita pip che compila numpy/scipy)
+# SOLO conda-forge, niente defaults
+RUN printf "%s\n" \
+  "channels:" \
+  "  - conda-forge" \
+  "channel_priority: strict" \
+  > /opt/conda/.condarc
 
-RUN conda update -n base -c defaults conda -y && \
-    conda install -n base -c conda-forge mamba -y && \
-    conda config --set channel_priority strict && \
-    mamba create -n geo_indicators -y -c conda-forge \
+# Crea env CONDA con TUTTO lo stack GIS + Flask
+RUN mamba create -n geo_indicators -y \
       python=3.9 \
       gdal \
       flask \
@@ -23,20 +23,27 @@ RUN conda update -n base -c defaults conda -y && \
       ujson \
       soupsieve \
       geojson \
-      botocore && \
+      pandana \
+      osmnet \
+      osmnx \
+      rtree \
+      pyproj \
+      shapely \
+      requests \
+      beautifulsoup4 \
+      osmpythontools \
+      boto3 \
+      botocore \
+      s3transfer && \
     conda clean -afy
 
-
-# Rende l'env "attivo" per i RUN successivi senza usare SHELL (Podman OCI friendly)
 ENV CONDA_DEFAULT_ENV=geo_indicators
 ENV PATH=/opt/conda/envs/geo_indicators/bin:$PATH
-
 WORKDIR /app
 
-# Se vuoi tenere requirements.txt, installa SOLO eventuali pacchetti extra
-# (e NON far reinstallare dipendenze già messe da conda)
+# pip SOLO per extra non conda ✅
 COPY requirements.txt .
-RUN pip install --no-cache-dir --no-deps -r requirements.txt || true
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia app
 COPY . .
