@@ -25,7 +25,7 @@ class Network(BaseModel):
 
 class POI(BaseModel):
     poi_category_osm: Optional[str] = None
-    poi_category_path: Optional[str] = None
+    poi_osm_path: Optional[str] = None
     poi_category_custom_name: Optional[str] = None
     poi_category_custom_csv: Optional[str] = None
     poi_category_custom_style: Optional[str] = None
