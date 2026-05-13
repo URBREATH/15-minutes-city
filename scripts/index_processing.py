@@ -35,7 +35,7 @@ from shapely.ops import transform
 from shapely import wkt
 from pyproj import Proj, transform
 import ast
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, box
 from .park_gates import gates_a, gates_b, gates_c
 from requests.exceptions import HTTPError
 from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
@@ -290,7 +290,6 @@ def upload_if_needed(
     if not output_minio_path or not is_minio_path(output_minio_path):
         return
 
-        return
 
     bucket, prefix = split_path(
         output_minio_path
@@ -1753,13 +1752,38 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custo
             
                 centri = (centri.drop(i))
         
+        
         #grid = geopandas.sjoin(grid, centri, how='inner', op ='contains')
         grid = geopandas.sjoin(grid, centri, how='inner', predicate='contains')
+
+        bbox = json.loads(aoi_bbox)
+
+        # bbox originale in EPSG:4326 -> la trasformo in EPSG:3857
+        xmin0, ymin0 = transformer.transform(bbox[1], bbox[0])  # lon_min, lat_min
+        xmax0, ymax0 = transformer.transform(bbox[3], bbox[2])  # lon_max, lat_max
         
-        grid = grid.to_crs(CRS_4326)
+        # apotema dell'esagono (hex_radius_m è il raggio): r * sqrt(3)/2
+        apotema = float(hex_radius_m) * (np.sqrt(3) / 2.0)
+        
+        # bbox "interna" (tolgo un apotema su tutti i lati)
+        bbox_inner = shapely.geometry.box(
+            xmin0 + apotema,
+            ymin0 + apotema,
+            xmax0 - apotema,
+            ymax0 - apotema,
+            ccw=True
+        )
+        
+        # tengo solo gli esagoni il cui centroide è dentro la bbox interna
+        mask = grid.geometry.centroid.within(bbox_inner)
+        grid = grid.loc[mask].copy()
+        
+
         
         grid = grid.drop('index_right', axis = 1)
        
+
+
 
         
         outputPath_grid = os.path.join(grid_folder, 'grid.gpkg')
@@ -2090,7 +2114,7 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custo
                 publish_data["data"].append({
                     "workspace": f"{filename}_{category}",
                     "store_name": f"{filename}_{category}",
-                    "data_path": f"{parts}/{filename}.{output_format}",
+                    "data_path": f"{parts}/output/{filename}.{output_format}",
                     "style_name": f"{category}",
                     "sld_path": f"{parts}/style/{category}.sld",
                     "write_on_catalogue": True,
@@ -2102,7 +2126,7 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custo
                 publish_data["data"].append({
                     "workspace": f"{filename}_{style_name}",
                     "store_name": f"{filename}_{style_name}",
-                    "data_path": f"{parts}/{style_name}.{output_format}",
+                    "data_path": f"{parts}/output/{style_name}.{output_format}",
                     "style_name": style_name,
                     "sld_path": poi_category_custom_style,
                     "write_on_catalogue": True,
