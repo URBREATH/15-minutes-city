@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 import io
 import contextlib 
 from main_15min import run_analysis
@@ -15,31 +15,35 @@ app = Flask(__name__)
 @app.route('/execute', methods=['POST'])
 def execute():
     try:
-        json_data = request.get_json() 
-        # Validazione e conversione dei parametri
-        params = AnalysisParams(**json_data).dict() 
-        
-
+        json_data = request.get_json()
+        params = AnalysisParams(**json_data).dict()
     except Exception as e:
         return jsonify({"error": f"Invalid parameters: {str(e)}"}), 400
-    
-    # Capture the stdout
-    output_buffer = io.StringIO() 
 
-    try:
-        with contextlib.redirect_stdout(output_buffer):
-            params = validate_api_params(params)
-            result = run_analysis(params)   
+    def generate():
+      
+        yield "START\n"
 
-        return jsonify({
-            "status": "ok",
-            "result_path": result["result_path"]
-        }), 200
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                params_validated = validate_api_params(params)
+                result = run_analysis(params_validated)
 
-    except BaseException as e:
-        return jsonify({
-            "error": str(e)
-        }), 400
+            yield json.dumps({
+                "status": "ok",
+                "result_path": result["result_path"]
+            })
+
+        except Exception as e:
+            yield json.dumps({
+                "error": str(e)
+            })
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="application/json"
+    )
+
 
 
 if __name__ == '__main__':
