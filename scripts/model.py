@@ -42,6 +42,7 @@ class Grid(BaseModel):
     grid_gpkg: Optional[str] = None
     hex_diameter_m: Optional[int] = 250
     clip_layer: Optional[str] = None
+    virtual_nodes: Optional[str] = "false"
 
 
 class AnalysisParams(BaseModel):
