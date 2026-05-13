@@ -2167,7 +2167,7 @@ def attach_centroids_to_network(centri, output_path_bbox, mode,output_minio_path
         )
         #edges = pd.read_csv(BytesIO(obj["Body"].read()), index_col=[0,1])
         edges = pd.read_csv(BytesIO(obj["Body"].read()))
-        logger.info(edges)
+
     else:
         nodes = pd.read_csv(f"{output_path_bbox}/osm_network/nodes.csv", index_col=0)
         edges = pd.read_csv(f"{output_path_bbox}/osm_network/edges.csv", index_col=[0,1]).reset_index()
