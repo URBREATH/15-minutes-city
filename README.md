@@ -89,8 +89,12 @@ walk_speed_kmh =  walking speed (default = 5.0 Km/h)
 bike_speed_kmh = biking speed (default = 15.0 Km/h)
 output_format = csv | gpkg | geojson
 output_EPSG = output CRS EPSG code (metric; default: 3857)
+[network]
+network_edges = full path to a csv file with u,v,length,time columns
+network_nodes =	full path to a csv file with y,x,type columns in EPSG:4326
 [poi]
 poi_category_osm = all | one of the category in `poi_category_osm_tag.json`
+poi_osm_path = path to the folder containing previously downloaded POI CSV files to be reused
 poi_category_custom_name = comma-separated list, names are lowercased and spaces removed
 poi_category_custom_csv = full CSV paths (comma-separated) with required columns: id, lat, lon in EPSG:4326.
 poi_category_custom_style = path to the custom sld for geoserver publication (comma-separated)
@@ -137,6 +141,10 @@ The API version required a ```parameters.json``` file:
     "output_format": null,
     "output_EPSG": null
   },
+  "network": {
+    "network_edges": "",
+    "network_nodes": ""
+  },
   "poi": {
     "poi_category_osm": "all",
     "poi_category_custom_name": null,
@@ -145,6 +153,7 @@ The API version required a ```parameters.json``` file:
   },
   "park": {
     "park_gates_source": "osm",
+    "poi_osm_path": "",
     "park_gates_osm_buffer_m": 10.0,
     "park_gates_csv": null,
     "park_gates_virtual_distance_m": 100.0
@@ -201,6 +210,11 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 | `ERR_017`  | grid_gpkg not found `<grid_gpkg>` |
 | `ERR_018`  | Invalid parameter value `output_format` |
 | `ERR_019`  | Invalid parameter value `output_EPSG` | 
+|`ERR_020`  | Invalid parameter value `poi_osm_path` |  
+|`ERR_021`  | Invalid parameter value `network_nodes` |  
+|`ERR_022`  | Invalid parameter value `network_edges` |  
+|`ERR_023`  | network_nodes and network_edges must be specified together |  
+|`ERR_024`  | GeoJSON output must use EPSG:4326` |  
 
 ---
 
