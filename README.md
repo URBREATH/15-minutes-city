@@ -213,8 +213,8 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 |`ERR_020`  | Invalid parameter value `poi_osm_path` |  
 |`ERR_021`  | Invalid parameter value `network_nodes` |  
 |`ERR_022`  | Invalid parameter value `network_edges` |  
-|`ERR_023`  | network_nodes and network_edges must be specified together |  
-|`ERR_024`  | GeoJSON output must use EPSG:4326` |  
+|`ERR_023`  | `network_nodes` and `network_edges` must be specified together |  
+|`ERR_024`  | GeoJSON output must use EPSG:4326 |  
 
 ---
 
