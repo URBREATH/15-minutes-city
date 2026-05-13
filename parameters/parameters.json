@@ -1,0 +1,39 @@
+{
+  "aoi": {
+    "bbox": null
+  },
+  "execution": {
+    "output_local_path": "",
+    "output_minio_path": "",
+    "filename": "",
+    "weight": "",
+    "mode": "",
+    "walk_speed_kmh": null,
+    "bike_speed_kmh": null,
+    "output_format": "",
+    "output_epsg": ""
+  },
+  "network": {
+    "network_edges": "",
+    "network_nodes": ""
+  },
+  "poi": {
+    "poi_category_osm": "",
+    "poi_osm_path ": "",
+    "poi_category_custom_name": null,
+    "poi_category_custom_csv": null,
+    "poi_category_custom_style": null
+  },
+  "park": {
+    "park_gates_source": "",
+    "park_gates_osm_buffer_m": "",
+    "park_gates_csv": null,
+    "park_gates_virtual_distance_m": ""
+  },
+  "grid": {
+    "grid_gpkg": null,
+    "hex_diameter_m": "",
+    "clip_layer": null,
+    "virtual_nodes": false
+  }
+}
