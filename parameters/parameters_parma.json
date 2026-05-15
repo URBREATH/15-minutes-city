@@ -38,7 +38,7 @@
   "grid": {
     "grid_gpkg": null,
     "hex_diameter_m": 250,
-    "clip_layer": null,
+    "clip_layer": "urbreath-public-repo/Parma/15minute_city_index/GA_Pilsen/parma_lau_eurostat.gpkg",
     "virtual_nodes": false
   }
 }
