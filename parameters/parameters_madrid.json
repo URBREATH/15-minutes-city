@@ -15,8 +15,8 @@
     "mode": "walk",
     "walk_speed_kmh": 5,
     "bike_speed_kmh": 15,
-    "output_format": "geojson",
-    "output_epsg": 4326
+    "output_format": "",
+    "output_epsg": null
   },
   "network": {
     "network_edges": "",
@@ -25,8 +25,8 @@
   "poi": {
     "poi_category_osm": "",
     "poi_osm_path": "",
-    "poi_category_custom_name": "transport_local",
-    "poi_category_custom_csv": "urbreath-public-repo/Madrid/15minute_city_index/GA_pilsen/custom_bus_stop.csv",
+    "poi_category_custom_name": "",
+    "poi_category_custom_csv": "",
     "poi_category_custom_style": null
   },
   "park": {
