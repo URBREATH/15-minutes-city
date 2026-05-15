@@ -39,6 +39,6 @@
     "grid_gpkg": "",
     "hex_diameter_m": 250,
     "clip_layer": "urbreath-public-repo/Leuven/15minute_city_index/GA_pilsen/leuven_lau_eurostat.gpkg",
-    "virtual_nodes": true
+    "virtual_nodes": false
   }
 }
