@@ -5,13 +5,13 @@
       4.641608,
       50.94408,
       4.770006
-    ]
+]
   },
   "execution": {
     "output_local_path": "tmp",
     "output_minio_path": "urbreath-public-repo/Leuven/15minute_city_index/Leuven",
     "filename": "leuven_15min_osm",
-    "weight": "time",
+    "weight": "distance",
     "mode": "walk",
     "walk_speed_kmh": 5,
     "bike_speed_kmh": 15,
@@ -19,12 +19,12 @@
     "output_epsg": null
   },
   "network": {
-    "network_edges": "",
-    "network_nodes": ""
+    "network_edges": "urbreath-public-repo/Leuven/15minute_city_index/20260514T120436_Leuven/osm_network/edges.csv",
+    "network_nodes": "urbreath-public-repo/Leuven/15minute_city_index/20260514T120436_Leuven/osm_network/nodes.csv"
   },
   "poi": {
     "poi_category_osm": "all",
-    "poi_osm_path": "",
+    "poi_osm_path": "urbreath-public-repo/Leuven/15minute_city_index/20260514T120436_Leuven/osm_poi",
     "poi_category_custom_name": null,
     "poi_category_custom_csv": null,
     "poi_category_custom_style": null
@@ -36,9 +36,9 @@
     "park_gates_virtual_distance_m": 100
   },
   "grid": {
-    "grid_gpkg": null,
+    "grid_gpkg": "",
     "hex_diameter_m": 250,
-    "clip_layer": null,
-    "virtual_nodes": false
+    "clip_layer": "urbreath-public-repo/Leuven/15minute_city_index/GA_pilsen/leuven_lau_eurostat.gpkg",
+    "virtual_nodes": true
   }
 }

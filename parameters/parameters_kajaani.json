@@ -1,0 +1,44 @@
+{
+  "aoi": {
+"bbox": [
+  64.094711,
+  27.540055,
+  64.250889,
+  27.958145
+]
+  },
+  "execution": {
+    "output_local_path": "tmp",
+    "output_minio_path": "urbreath-public-repo/Kajaani/15minute_city_index/Kajaani",
+    "filename": "kajaani_15min_osm",
+    "weight": "time",
+    "mode": "walk",
+    "walk_speed_kmh": 5,
+    "bike_speed_kmh": 15,
+    "output_format": "",
+    "output_epsg": null
+  },
+  "network": {
+    "network_edges": "",
+    "network_nodes": ""
+  },
+  "poi": {
+    "poi_category_osm": "all",
+    "poi_osm_path": "",
+    "poi_category_custom_name": null,
+    "poi_category_custom_csv": null,
+    "poi_category_custom_style": null
+  },
+  "park": {
+    "park_gates_source": "",
+    "park_gates_osm_buffer_m": 10,
+    "park_gates_csv": null,
+    "park_gates_virtual_distance_m": 100
+  },
+  "grid": {
+    "grid_gpkg": null,
+    "hex_diameter_m": 250,
+    "clip_layer": "urbreath-public-repo/Kajaani/15minute_city_index/GA_pilsen/kajaani_lau_eurostat.gpkg",
+    "virtual_nodes": false
+  }
+}

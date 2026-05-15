@@ -1,0 +1,44 @@
+{
+  "aoi": {
+    "bbox": [
+      40.3122159,
+      -3.8872941,
+      40.642093,
+      -3.519758
+    ]
+  },
+  "execution": {
+    "output_local_path": "tmp",
+    "output_minio_path": "urbreath-public-repo/Madrid/15minute_city_index/Madrid",
+    "filename": "madrid_15min_osm",
+    "weight": "time",
+    "mode": "walk",
+    "walk_speed_kmh": 5,
+    "bike_speed_kmh": 15,
+    "output_format": "geojson",
+    "output_epsg": 4326
+  },
+  "network": {
+    "network_edges": "",
+    "network_nodes": ""
+  },
+  "poi": {
+    "poi_category_osm": "",
+    "poi_osm_path": "",
+    "poi_category_custom_name": "transport_local",
+    "poi_category_custom_csv": "urbreath-public-repo/Madrid/15minute_city_index/GA_pilsen/custom_bus_stop.csv",
+    "poi_category_custom_style": null
+  },
+  "park": {
+    "park_gates_source": "",
+    "park_gates_osm_buffer_m": 10,
+    "park_gates_csv": null,
+    "park_gates_virtual_distance_m": 100
+  },
+  "grid": {
+    "grid_gpkg": null,
+    "hex_diameter_m": 250,
+    "clip_layer": "urbreath-public-repo/Madrid/15minute_city_index/GA_pilsen/madrid_lau_eurostat.gpkg",
+    "virtual_nodes": false
+  }
+}
