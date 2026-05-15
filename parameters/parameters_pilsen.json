@@ -24,7 +24,7 @@
   },
   "poi": {
     "poi_category_osm": "all",
-    "poi_osm_path": "urbreath-public-repo/Pilsen/15minute_city_index/GA_pilsen/osm_poi",
+    "poi_osm_path": "",
     "poi_category_custom_name": null,
     "poi_category_custom_csv": null,
     "poi_category_custom_style": null
@@ -39,6 +39,6 @@
     "grid_gpkg": null,
     "hex_diameter_m": 250,
     "clip_layer": "urbreath-public-repo/Pilsen/15minute_city_index/GA_pilsen/plzeň_lau_eurostat.gpkg",
-    "virtual_nodes": true
+    "virtual_nodes": false
   }
 }
