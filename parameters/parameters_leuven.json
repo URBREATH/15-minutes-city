@@ -19,8 +19,8 @@
     "output_epsg": null
   },
   "network": {
-    "network_edges": "urbreath-public-repo/Leuven/15minute_city_index/20260514T120436_Leuven/osm_network/edges.csv",
-    "network_nodes": "urbreath-public-repo/Leuven/15minute_city_index/20260514T120436_Leuven/osm_network/nodes.csv"
+    "network_edges": "",
+    "network_nodes": ""
   },
   "poi": {
     "poi_category_osm": "all",
