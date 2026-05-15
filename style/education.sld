@@ -10,10 +10,10 @@
   version="1.1.0">
 
   <NamedLayer>
-    <se:Name>urbreath_parma_walkability_education</se:Name>
+    <se:Name>urbreath_walkability_education</se:Name>
 
     <UserStyle>
-      <se:Name>urbreath_parma_walkability_education</se:Name>
+      <se:Name>urbreath_walkability_education</se:Name>
 
       <se:FeatureTypeStyle>
 
