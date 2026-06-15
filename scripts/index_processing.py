@@ -35,7 +35,7 @@ from shapely.ops import transform
 from shapely import wkt
 from pyproj import Proj, transform
 import ast
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, box
 from .park_gates import gates_a, gates_b, gates_c
 from requests.exceptions import HTTPError
 from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
@@ -47,46 +47,18 @@ from io import BytesIO
 import random
 from scripts.logger import logger
 
-#osm.settings['user_agent'] = "15min-tool contact: chiara.savoldi https://www.dedanext.it/topic-citta-15-minuti/"
-headers = {
-    "Accept": "application/json",
-    "User-Agent": (
-        "15min-tool"
-        "contact: chiara.savoldi"
-    ),
-    "Referer": "https://www.dedanext.it/topic-citta-15-minuti/"
-}
 
-osmnet.headers = headers
+import osmnx as ox
 
-from scripts.storage_minio import upload_on_minio,get_folder,split_path,get_s3_client,minio_file_exists,minio_copy_prefix,minio_list_poi_categories,is_minio_path,split_bucket_and_prefix,load_pois_from_minio
+
+from scripts.storage_minio import copy_from_minio,minio_copy_file,upload_on_minio,get_folder,split_path,get_s3_client,minio_file_exists,minio_copy_prefix,minio_list_poi_categories,is_minio_path,split_bucket_and_prefix,load_pois_from_minio
 warnings.filterwarnings("ignore")
-# Supply the path to the qgis install location:  imposti QGIS per girare senza GUI
-#os.environ["QT_QPA_PLATFORM"] = "offscreen"
-#QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/bin/qgis", True)
-## QgsApplication.setPrefixPath(r"/opt/conda/envs/geo_indicators/", True)
-#gui_flag = False
-#app = QgsApplication([], gui_flag)
-#app.initQgis()
-#
-## Inizializza Processing : inizializza il framework Processing di QGIS, che gestisce gli algoritmi (come GDAL, native tools, plugin).
-#from processing.core.Processing import Processing
-#Processing.initialize()
-#
-## aggiungi il provider di algoritmi nativi QGIS (buffer, raster, ecc.) al registry Processing.
-#
-## processing permette di eseguire algoritmi da codice
-#import processing
-#
-#logger.info("QGIS is active!")
-#Variabili globali
 
 
 # GLOBAL
 #---------------------
 
 TEMPOMAX = 60 #min
-EPSG_3857 = 'EPSG:3857'
 CRS_3857 = 3857
 EPSG_4326 = 'EPSG:4326'
 CRS_4326 = 4326
@@ -104,7 +76,7 @@ osmnet.config.settings.log_file = False
 # -----------------------------------------------------------------------------------------------------------------------------------
 # UTILITY FUNCTIONS
 
-# area = [lat_min, lon_min, lat_max, lon_max] in EPSG:4326
+# area = [aoi_bbox, aoi_bbox, aoi_bbox, aoi_bbox] in EPSG:4326
 # lat_meters = length in meters of a vertical linear element located near the bbox (radii, buffers, etc.)
 # lat1 = latitude of the bbox (area) center
 # lon  = longitude of the bbox (area) center
@@ -116,20 +88,20 @@ osmnet.config.settings.log_file = False
 def latitudine_gradi(area, lat_metri):
     lat1 = (area[2]+area[0])/2
     lon = (area[3]+area[1])/2
-    transformer = Transformer.from_crs(EPSG_4326,EPSG_3857)
+    transformer = Transformer.from_crs(EPSG_4326,EPSG_METRIC)
     x,y1 = transformer.transform(lat1, lon) #meters
     y2 = y1 + lat_metri #meters
-    transformer = Transformer.from_crs(EPSG_3857,EPSG_4326)
+    transformer = Transformer.from_crs(EPSG_METRIC,EPSG_4326)
     lat2, lon = transformer.transform(x, y2) #gradi
     return((lat2-lat1))
     
 def longitudine_gradi(area, lon_metri):
     lon1 = (area[3]+area[1])/2
     lat = (area[2]+area[0])/2
-    transformer = Transformer.from_crs(EPSG_4326,EPSG_3857)
+    transformer = Transformer.from_crs(EPSG_4326,EPSG_METRIC)
     x1,y = transformer.transform(lat, lon1) #meters
     x2 = x1 + lon_metri #meters
-    transformer = Transformer.from_crs(EPSG_3857,EPSG_4326)
+    transformer = Transformer.from_crs(EPSG_METRIC,EPSG_4326)
     lat, lon2 = transformer.transform(x2, y) #gradi
     return((lon2-lon1))
 
@@ -141,12 +113,84 @@ def decay(time):
     elif(time >= 0 and time <=15): return 1
     else: return 0
 
- 
+
+def overpass_query(bbox,query):
+
+    
+    overpass = Overpass()
+    response = overpass.query(query, timeout=200)
+
+    return response
+
+def overpass_node_query(south, west, north, east, tag_query):
+
+    
+    query = f"""
+    [out:json][timeout:180];
+    (
+      node({south},{west},{north},{east})[{tag_query}];
+    );
+    out geom;
+    """
+    
+    
+    headers = {
+        "User-Agent": os.environ.get(
+            "OSM_USER_AGENT",
+            "15min-tool (contact: chiara savoldi)"
+        ),
+        "Accept": "application/json",
+        "Referer": "https://www.dedanext.it/topic-citta-15-minuti/"
+    }
+
+
+    r = requests.post(
+        "https://overpass-api.de/api/interpreter",
+        data={"data": query},
+        headers=headers
+    )
+    data = r.json()
+  
+    nodes = []
+    for el in data.get("elements", []):
+        if el["type"] == "node":
+            nodes.append({
+                "id": el["id"],
+                "lat": el["lat"],
+                "lon": el["lon"],
+                **el.get("tags", {})
+            })
+
+    return pd.DataFrame(nodes)
+
+def read_csv_any(path,
+            access_key,
+            secret_key,
+            endpoint_url):
+
+    if is_minio_path(path):
+
+        tmp_file = tempfile.mktemp(suffix=".csv")
+
+        copy_from_minio(
+            path,
+            tmp_file,
+            access_key,
+            secret_key,
+            endpoint_url
+        )
+
+        return pd.read_csv(tmp_file)
+
+    return pd.read_csv(path)
+
+
 # -----------------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------------
 # BBOX
 
 def create_bbox(bbox, output_path, output_minio_path,hex_diameter_m, access_key, secret_key, endpoint_url):
+              
     if access_key and secret_key and endpoint_url and is_minio_path(output_path):
         
         bucket_name, filepath_minio = split_path(output_minio_path)
@@ -176,10 +220,10 @@ def create_bbox(bbox, output_path, output_minio_path,hex_diameter_m, access_key,
         
         latoXCella = 3/2 * hex_diameter_m
         latoYCella = np.sqrt(3)/2 * hex_diameter_m
-    
+        
         latitude = latitudine_gradi(bbox, latoYCella)
         longitude = longitudine_gradi(bbox, latoXCella)
-    
+        
         riga_bbox = [
             "[" + ",".join([str(el) for el in bbox]) + "]",  # bbox original
             "[" + ",".join([str(el) for el in bbox]) + "]",  # bbox FOR DOWNLOAD
@@ -191,19 +235,19 @@ def create_bbox(bbox, output_path, output_minio_path,hex_diameter_m, access_key,
         os.makedirs(grid_folder)
             
         np.savetxt(csv_path, [riga_bbox], delimiter=';', fmt='%s',
-                   header='inputBBox;downloadBBox;latitude;longitude;hex_radius_m', comments='')
-         
+                header='inputBBox;downloadBBox;latitude;longitude;hex_radius_m', comments='')
+        
         if access_key and secret_key and endpoint_url:         
             get_folder(grid_folder, output_minio_path,access_key, secret_key, endpoint_url)
-           
-        return 0
+        
+    return 0
 
 
 # -----------------------------------------------------------------------------------------------------------------------------------
 
 # DOWNLOAD
 
-def download(bbox_tassello, output_path_bbox,    
+def download(aoi_bbox, output_path_bbox,    
     poi_category_custom_name,
     poi_category_custom_csv,
     poi_category_osm ,
@@ -211,6 +255,9 @@ def download(bbox_tassello, output_path_bbox,
     secret_key, 
     endpoint_url,
     output_minio_path,
+    network_edges,
+    network_nodes,
+    poi_osm_path,
     mode = 'walk',
     weight='time',
     park_gates_source='osm',
@@ -219,27 +266,62 @@ def download(bbox_tassello, output_path_bbox,
     park_gates_virtual_distance_m=100
 ):
    
-    bbox_tassello = json.loads(bbox_tassello)
+    aoi_bbox = json.loads(aoi_bbox)
         
     #Download network 
-    download_network_osm(bbox_tassello, output_path_bbox, access_key, secret_key, endpoint_url, output_minio_path, mode, weight)
+    download_network_osm(aoi_bbox, output_path_bbox, access_key, secret_key, endpoint_url, output_minio_path, network_edges, network_nodes,mode, weight)
     
     # Dowload POIs
-    download_poi_osm(bbox_tassello, output_path_bbox, poi_category_osm, poi_category_custom_name, poi_category_custom_csv, access_key, secret_key, endpoint_url,output_minio_path,park_gates_source, park_gates_osm_buffer_m
+    download_poi_osm(aoi_bbox, output_path_bbox, poi_category_osm, poi_osm_path,poi_category_custom_name, poi_category_custom_csv, access_key, secret_key, endpoint_url,output_minio_path,park_gates_source, park_gates_osm_buffer_m
     ,park_gates_csv, park_gates_virtual_distance_m)
            
     return 0
 
+def upload_if_needed(
+    local_file,
+    target_relative_path,
+    output_minio_path,
+    access_key,
+    secret_key,
+    endpoint_url
+):
 
     
+    if not output_minio_path or not is_minio_path(output_minio_path):
+        return
+
+
+    bucket, prefix = split_path(
+        output_minio_path
+    )
+
+    target_path = (
+        f"{bucket}/"
+        f"{prefix}/"
+        f"{target_relative_path}"
+    )
+
+    upload_on_minio(
+        local_file,
+        target_path,
+        access_key,
+        secret_key,
+        endpoint_url
+    )
+
+    logger.info(
+        f"Uploaded -> {target_path}"
+    )
+    
 def download_poi_osm(
-    bbox_tassello,
+    aoi_bbox,
     output_path_bbox,
     poi_category_osm,
+    poi_osm_path,
     custom_names,
     custom_csvs,
-    access_key, 
-    secret_key, 
+    access_key,
+    secret_key,
     endpoint_url,
     output_minio_path,
     park_gates_source='osm',
@@ -249,241 +331,572 @@ def download_poi_osm(
 ):
 
 
-    logger.info('DOWNLOAD POIs start.')
-    logger.info('----------------------------------------------------------------------------------------------------------------')
-        
+
+    logger.info("DOWNLOAD POIs start.")
+    logger.info("-" * 120)
+
     
-    # Clean inputs
-    poi_category_osm = poi_category_osm.strip() if poi_category_osm else None
+    #Controlla se le credenziali MinIO sono presenti.
+    def has_minio():
+        return all([
+            access_key,
+            secret_key,
+            endpoint_url
+        ])
+    # se è 'all' valid_categories sono tutte, altrimenti le splitta
+    
+    def parse_categories(poi_category_osm, valid_categories):
+    
+        # ✅ solo custom: None significa "non usare OSM"
+        if poi_category_osm is None:
+            return set()
+    
+        if (not poi_category_osm) or (poi_category_osm.lower().strip() == "all"):
+            return set(valid_categories)
+    
+        return {
+            x.strip().lower()
+            for x in poi_category_osm.split(";")
+            if x.strip()
+        }
+    
+    # Legge tutti i .csv in una cartella.
+    def list_local_categories(folder):
 
-    logger.info("poi_category_osm: %s", poi_category_osm)
-    logger.info("custom_names: %s", custom_names)
-    logger.info("custom_csvs: %s", custom_csvs)
+        if not os.path.exists(folder):
+            return set()
 
-    # Folder for POIs
-    poi_folder = os.path.join(output_path_bbox, "osm_poi")
-    if not os.path.exists(poi_folder):
-        os.makedirs(poi_folder)
+        return {
+            os.path.splitext(f)[0]
+            for f in os.listdir(folder)
+            if f.endswith(".csv")
+        }
+    
+    #Wrapper per leggere CSV presenti su MinIO.
+    def list_minio_categories_wrapper(minio_path):
 
-    # -------------------
-    # OSM LOGIC
-    # -------------------
-            
-    if poi_category_osm is not None:
-       
-        with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
-            osm_tags = json.load(f)
-            valid_poi_category_osm = set(osm_tags.keys())
-        
-        if poi_category_osm == "all":
-            categories_to_download = valid_poi_category_osm
-        else:
-            categories_to_download = {poi_category_osm.lower()}
-        skip_osm_download = False
+        bucket, prefix = split_path(minio_path)
 
-        if access_key and secret_key and endpoint_url and is_minio_path(output_path_bbox):
+        return minio_list_poi_categories(
+            bucket=bucket,
+            prefix=prefix,
+            endpoint_url=endpoint_url,
+            access_key=access_key,
+            secret_key=secret_key
+        )
 
-            bucket_name, filepath = split_path(output_path_bbox)
 
-            # categorie già presenti su MinIO
-            existing_categories = minio_list_poi_categories(
-                bucket=bucket_name,
-                prefix=f"{filepath}/osm_poi/",
-                endpoint_url=endpoint_url,
-                access_key=access_key,
-                secret_key=secret_key
-            )
-        
-            logger.info(f"POI categories already on MinIO: {existing_categories}")
-        
-            # scarico SOLO quelle mancanti
-            categories_to_download = categories_to_download - existing_categories
+    # ==================================================
+    # LOCAL FOLDERS
+    # ==================================================
 
-            
-            bucket_name, filepath_minio = split_path(output_minio_path)
+    poi_folder = os.path.join(
+        output_path_bbox,
+        "osm_poi"
+    )
 
-            minio_copy_prefix(
-                        bucket=bucket_name,
-                        source_prefix=f"{filepath}/osm_poi/",
-                        dest_prefix=f"{filepath_minio}/osm_poi",
-                        endpoint_url=endpoint_url,
-                        access_key=access_key,
-                        secret_key=secret_key
-            )
-                    
-            if not categories_to_download:
-                logger.info("All requested POI categories already exist on MinIO. Skipping.")
-                skip_osm_download = True
-            
-        if 'park' in categories_to_download and not os.path.isfile(f"{poi_folder}/park.csv"):
-            logger.info("Downloading park from OSM and handling park gates...")
-            try:
-                park_csv_path_local = os.path.join(poi_folder, "park.csv")
-                if park_gates_source == 'osm':
-                    with open("./config/park_gate_osm_tag.json", "r", encoding="utf-8") as f:
-                        gate_tags = json.load(f)
-                    all_gates = []
+    custom_poi_folder = os.path.join(
+        output_path_bbox,
+        "custom_poi"
+    )
 
-                    for key, values in gate_tags["gate"].items():
-                        for value in values:
-                            tag_query = f'"{key}"="{value}"'
-                            df = safe_osm_query(bbox_tassello, tags=tag_query)
-                            all_gates.append(df)
-                    
-                    gates = pd.concat(all_gates, ignore_index=True)
+    os.makedirs(
+        poi_folder,
+        exist_ok=True
+    )
 
-                    #gates1 = safe_osm_query(bbox_tassello, tags='"barrier"="gate"')
-                    #gates2 = safe_osm_query(bbox_tassello, tags='"barrier"="entrance"')
-                    #gates3 = safe_osm_query(bbox_tassello, tags='"entrance"="yes"')
-                    #gates = pd.concat([gates1, gates2, gates3], ignore_index=True)
-                    logger.info('----------------------------------------------------------------------------------------------------------------')                   
-                    logger.info(f"Found {len(gates)} park gates from OSM")
-                    handle_gates("A", bbox_tassello, output_path_bbox, gates, None, None, park_csv_path_local, park_gates_osm_buffer_m, None)
-                    logger.info('----------------------------------------------------------------------------------------------------------------')                    
-            
-                elif park_gates_source == 'csv' and park_gates_csv:
-                    df = pd.read_csv(park_gates_csv)
-                    logger.info('----------------------------------------------------------------------------------------------------------------')                    
-                    logger.info(f"Loaded {len(df)} park gates from CSV", )
-                    df.to_csv(park_csv_path_local, index=False)
-                    logger.info('----------------------------------------------------------------------------------------------------------------')                    
-            
-                elif park_gates_source == 'road_intersect':
-            
-                    handle_gates("road_intersect", bbox_tassello,output_path_bbox, None, None, None, park_csv_path_local, None, None)
-                    logger.info("")
-                elif park_gates_source == 'virtual':
-                    handle_gates("virtual", bbox_tassello,output_path_bbox, None, None, None, park_csv_path_local, None, park_gates_virtual_distance_m)
-                    logger.info("")
-            except RuntimeError as e:
-                logger.info(e)
-                np.savetxt(f"{poi_folder}/park.csv", ['id,lat,lon,amenity'], delimiter=';', fmt='%s')
-            except (HTTPError, requests.exceptions.RequestException) as e:
-                logger.info(e)
-                pass
-                                            
-        
-        if 'transport' in categories_to_download and not os.path.isfile(f"{poi_folder}/transport.csv"):
-        
-            tag_dict = osm_tags["transport"]
-            dfs = []
-        
-            for key, values in tag_dict.items():
-                values_regex = "|".join(values)
-                tags_query = f'"{key}"~"{values_regex}"'
-        
-                logger.info(f"Downloading transport with tags: {tags_query}")
-        
-                max_retries = 2
-        
-                for attempt in range(max_retries):
-                    try:
-                        df = osm.node_query(
-                            bbox_tassello[0],
-                            bbox_tassello[1],
-                            bbox_tassello[2],
-                            bbox_tassello[3],
-                            tags=tags_query
-                        )
-        
-                        if df is None or df.empty:
-                            df = pd.DataFrame(columns=["id", "lat", "lon"])
-        
-                        dfs.append(df)
-                        break  
-        
-                    except (HTTPError, requests.exceptions.RequestException) as e:
-                        wait = (15 * (attempt + 1)) + random.uniform(3, 8)
-                        time.sleep(wait)
-        
-                    except Exception as e:
-                        dfs.append(pd.DataFrame(columns=["id", "lat", "lon"]))
-                        break
-        
-                else:
-                    dfs.append(pd.DataFrame(columns=["id", "lat", "lon"]))
-        
-            time.sleep(15)
-        
-            if dfs:
-                transport = pd.concat(dfs, ignore_index=True)
-            else:
-                transport = pd.DataFrame(columns=["id", "lat", "lon"])
-        
-            transport.to_csv(f"{poi_folder}/transport.csv", index=False)
-            
-             
-        for osm_cat in categories_to_download:
+    os.makedirs(
+        custom_poi_folder,
+        exist_ok=True
+    )
 
-            tag_dict = osm_tags[osm_cat]
-            dfs = []
-            if not os.path.isfile(f"{poi_folder}/{osm_cat}.csv"):        
-               
-                for key, values in tag_dict.items():
-                    values_regex = "|".join(values)
-                    tag_query = f'"{key}"~"{values_regex}"'
-                            
-                    logger.info(f"Downloading {osm_cat} with tags: {tag_query}")
-                    max_retries = 2
-                    for attempt in range(max_retries):
-                        try:
-                            df = osm.node_query(
-                                bbox_tassello[0],
-                                bbox_tassello[1],
-                                bbox_tassello[2],
-                                bbox_tassello[3],
-                                tags=tag_query
-                            )
-                            if df is None or df.empty:
-                                df = pd.DataFrame(columns=["id", "lat", "lon"])
-                
-                            dfs.append(df)
-                            break 
-                        except (HTTPError, requests.exceptions.RequestException) as e:
-                            wait = (10 * (attempt + 1)) + random.uniform(2,6)
-                            time.sleep(wait)
-                        except Exception as e:
-                            logger.warning(f"node_query failed for {osm_cat} / {tag_query}: {repr(e)}")
-                            empty_df = pd.DataFrame(columns=["id", "lat", "lon"])
-                            dfs.append(empty_df)
-                
-                time.sleep(15)                    
-                if len(dfs) > 0:
-                    result = pd.concat(dfs, ignore_index=True)
-                else:
-                    result = pd.DataFrame(columns=["id", "lat", "lon"])
-                
-                result.to_csv(
-                    os.path.join(poi_folder, f"{osm_cat}.csv")
+    # ==================================================
+    # LOAD OSM TAG CONFIG
+    # ==================================================
+
+    with open(
+        "./config/poi_category_osm_tag.json",
+        "r",
+        encoding="utf-8"
+    ) as f:
+
+        osm_tags = json.load(f)
+
+    valid_categories = set(
+        osm_tags.keys()
+    )
+
+    # ==================================================
+    # REQUESTED CATEGORIES
+    # ==================================================
+
+    requested_categories = parse_categories(
+        poi_category_osm,
+        valid_categories
+    )
+
+    logger.info(
+        f"Requested categories: "
+        f"{requested_categories}"
+    )
+
+    # ==================================================
+    # AVAILABLE CATEGORIES
+    # ==================================================
+
+    available_categories = set()
+
+    if poi_osm_path:
+        
+        logger.info(
+            f"poi_osm_path: "
+            f"{poi_osm_path}"
+        )
+
+        if is_minio_path(poi_osm_path):
+
+            available_categories = (
+                list_minio_categories_wrapper(
+                    poi_osm_path
                 )
-            else:
-                logger.info(f'Category {osm_cat} csv skipped or already presents.')                        
+            )
 
-        if access_key and secret_key and endpoint_url and skip_osm_download is False: 
-            get_folder(poi_folder, output_minio_path,access_key, secret_key, endpoint_url)
-    # -------------------
-    # CUSTOM CSVs
-    # -------------------
-    if custom_names is not None:
-        custom_poi_folder = os.path.join(output_path_bbox, "custom_poi")
-        for name, csv_file in zip(custom_names, custom_csvs):
-            
-            if not os.path.exists(custom_poi_folder):
-                os.makedirs(custom_poi_folder)
-            csv_path = os.path.join(custom_poi_folder, f"{name}.csv")
-            df = pd.read_csv(csv_file)
-            logger.info(f"Custom CSV '{csv_file}' has {len(df)} rows")
-            df.to_csv(csv_path, index=False)
-            logger.info(f"Saved custom CSV as '{name}.csv'")
-        if access_key and secret_key and endpoint_url: 
-            get_folder(custom_poi_folder, output_minio_path,access_key, secret_key, endpoint_url)
-    
-    logger.info('----------------------------------------------------------------------------------------------------------------')
-    logger.info("DOWNLOAD POIs end.\n")
+        else:
+
+            available_categories = (
+                list_local_categories(
+                    poi_osm_path
+                )
+            )
+
+    available_categories = {
+        c.lower().strip()
+        for c in available_categories
+        if c.lower().strip() in valid_categories
+    }
+
+    logger.info(
+        f"Available categories: "
+        f"{available_categories}"
+    )
+
+    # ==================================================
+    # SPLIT AVAILABLE / MISSING
+    # ==================================================
+
+    already_available = (
+        requested_categories &
+        available_categories
+    )
+
+    missing_categories = (
+        requested_categories -
+        available_categories
+    )
+
+    logger.info(
+        f"Already available: "
+        f"{already_available}"
+    )
+
+    logger.info(
+        f"Missing categories: "
+        f"{missing_categories}"
+    )
+
+    # ==================================================
+    # COPY EXISTING POIs
+    # ==================================================
+
+    for cat in already_available:
+
+        local_destination = os.path.join(
+            poi_folder,
+            f"{cat}.csv"
+        )
+
+        logger.info(
+            f"Using existing POI: {cat}"
+        )
+
+        # -----------------------------
+        # MINIO SOURCE
+        # -----------------------------
+
+        if is_minio_path(poi_osm_path):
+
+            source_path = (
+            f"{poi_osm_path.rstrip('/')}/"
+            f"{cat}.csv"
+            )
+
+            copy_from_minio(
+            source_path,
+            local_destination,
+            access_key,
+            secret_key,
+            endpoint_url
+            )
+
+        # -----------------------------
+        # LOCAL SOURCE
+        # -----------------------------
+
+        else:
+
+            source_path = os.path.join(
+                poi_osm_path,
+                f"{cat}.csv"
+            )
+
+            shutil.copy2(
+                source_path,
+                local_destination
+            )
+
+        # -----------------------------
+        # OPTIONAL OUTPUT MINIO
+        # -----------------------------
+
+        upload_if_needed(
+            local_destination,
+            f"osm_poi/{cat}.csv",
+            output_minio_path,
+            access_key,
+            secret_key,
+            endpoint_url
+        )
+
+    # ==================================================
+    # DOWNLOAD MISSING POIs
+    # ==================================================
+
+    for osm_cat in missing_categories:
+
+        logger.info(
+            f"Downloading missing "
+            f"category: {osm_cat}"
+        )
+
+        local_csv_path = os.path.join(
+            poi_folder,
+            f"{osm_cat}.csv"
+        )
+
+        tag_dict = osm_tags[osm_cat]
+
+        dfs = []
+
+        for key, values in tag_dict.items():
+
+            values_regex = "|".join(values)
+
+            tag_query = (
+                f'"{key}"~"{values_regex}"'
+            )
+
+            logger.info(
+                f"Query: {tag_query}"
+            )
+
+            max_retries = 2
+
+            for attempt in range(max_retries):
+
+                try:
+
+                    df = overpass_node_query(
+                        aoi_bbox[0],
+                        aoi_bbox[1],
+                        aoi_bbox[2],
+                        aoi_bbox[3],
+                        tag_query
+                    )
+
+                    if (
+                        df is None or
+                        df.empty
+                    ):
+
+                        df = pd.DataFrame(
+                            columns=[
+                                "id",
+                                "lat",
+                                "lon"
+                            ]
+                        )
+
+                    dfs.append(df)
+
+                    break
+
+                except Exception as e:
+
+                    logger.warning(
+                        f"Retry "
+                        f"{attempt+1} "
+                        f"failed for "
+                        f"{osm_cat}: {e}"
+                    )
+
+                    time.sleep(5)
+
+        # -----------------------------
+        # CONCAT
+        # -----------------------------
+
+        if len(dfs) > 0:
+
+            result = pd.concat(
+                dfs,
+                ignore_index=True
+            )
+
+        else:
+
+            result = pd.DataFrame(
+                columns=[
+                    "id",
+                    "lat",
+                    "lon"
+                ]
+            )
+
+        # -----------------------------
+        # SAVE LOCAL
+        # -----------------------------
+
+        result.to_csv(
+            local_csv_path,
+            index=False
+        )
+
+        logger.info(
+            f"Saved "
+            f"{local_csv_path}"
+        )
+
+        # -----------------------------
+        # OPTIONAL UPLOAD
+        # -----------------------------
+
+        upload_if_needed(
+            local_csv_path,
+            f"osm_poi/{osm_cat}.csv",
+            output_minio_path,
+            access_key,
+            secret_key,
+            endpoint_url
+            )
+
+    if 'park' in missing_categories:
+        handle_park_category(
+        poi_folder,
+        aoi_bbox,
+        output_path_bbox,
+        park_gates_source,
+        park_gates_csv,
+        park_gates_osm_buffer_m,
+        park_gates_virtual_distance_m,
+        access_key,
+        secret_key,
+        endpoint_url,
+        output_minio_path
+        )
+    # ==================================================
+    # CUSTOM POIs
+    # ==================================================
+
+    if custom_names and custom_csvs:
+
+        for name, csv_file in zip(
+            custom_names,
+            custom_csvs
+        ):
+
+            logger.info(
+                f"Processing custom POI: "
+                f"{name}"
+            )
+
+            local_csv_path = os.path.join(
+                custom_poi_folder,
+                f"{name}.csv"
+            )
+
+            df = read_csv_any(
+                csv_file,
+            access_key,
+            secret_key,
+            endpoint_url
+            )
+
+            logger.info(
+                f"Rows: {len(df)}"
+            )
+
+            # -----------------------------
+            # SAVE LOCAL
+            # -----------------------------
+
+            df.to_csv(
+                local_csv_path,
+                index=False
+            )
+
+            logger.info(
+                f"Saved custom POI: "
+                f"{local_csv_path}"
+            )
+
+            # -----------------------------
+            # OPTIONAL UPLOAD
+            # -----------------------------
+
+            upload_if_needed(
+                local_csv_path,
+                f"custom_poi/{name}.csv",
+                output_minio_path,
+            access_key,
+            secret_key,
+            endpoint_url
+            )
+
+    logger.info("-" * 120)
+    logger.info("DOWNLOAD POIs end.")
+
     return 0
 
 
+def handle_park_category(
+    poi_folder,
+    bbox_tassello,
+    output_path_bbox,
+    park_gates_source,
+    park_gates_csv,
+    park_gates_osm_buffer_m,
+    park_gates_virtual_distance_m,
+    access_key,
+    secret_key,
+    endpoint_url,
+    output_minio_path
+):
 
+    park_path = os.path.join(poi_folder, "park.csv")
+
+    logger.info("Downloading park from OSM and handling park gates...")
+
+    try:
+        # ==================================================
+        # OSM SOURCE
+        # ==================================================
+
+        if park_gates_source == 'osm':
+
+            with open("./config/park_gate_osm_tag.json", "r", encoding="utf-8") as f:
+                gate_tags = json.load(f)
+
+            all_gates = []
+
+            for key, values in gate_tags["gate"].items():
+                for value in values:
+                    tag_query = f'"{key}"="{value}"'
+                    df = safe_osm_query(bbox_tassello, tags=tag_query)
+                    all_gates.append(df)
+
+            gates = pd.concat(all_gates, ignore_index=True)
+
+            logger.info("-" * 120)
+            logger.info(f"Found {len(gates)} park gates from OSM")
+
+            park = handle_gates(
+                "A",
+                bbox_tassello,
+                output_path_bbox,
+                gates,
+                None,
+                None,
+                park_path,
+                park_gates_osm_buffer_m,
+                None
+            )
+
+            logger.info("-" * 120)
+
+        # ==================================================
+        # CSV SOURCE (LOCAL OR MINIO)
+        # ==================================================
+        elif park_gates_source == 'csv' and park_gates_csv:
+
+            park = read_csv_any(
+                park_gates_csv,
+            access_key,
+            secret_key,
+            endpoint_url
+            )
+
+            logger.info("-" * 120)
+            logger.info(f"Loaded {len(park)} park gates from CSV")
+
+            park.to_csv(park_path, index=False)
+
+            logger.info("-" * 120)
+
+        # ==================================================
+        # ROAD INTERSECT
+        # ==================================================
+        elif park_gates_source == 'road_intersect':
+
+            park = handle_gates(
+                "road_intersect",
+                bbox_tassello,
+                output_path_bbox,
+                None,
+                None,
+                None,
+                park_path,
+                None,
+                None
+            )
+
+        # ==================================================
+        # VIRTUAL
+        # ==================================================
+        elif park_gates_source == 'virtual':
+
+            park = handle_gates(
+                "virtual",
+                bbox_tassello,
+                output_path_bbox,
+                None,
+                None,
+                None,
+                park_path,
+                None,
+                park_gates_virtual_distance_m
+            )
+
+        park.to_csv(park_path, index=False)
+        upload_if_needed(
+        park_path,
+        f"osm_poi/park.csv",
+        output_minio_path,
+        access_key,
+        secret_key,
+        endpoint_url
+        )
+    except RuntimeError as e:
+        logger.info(e)
+        np.savetxt(
+            park_path,
+            ['id,lat,lon,amenity'],
+            delimiter=';',
+            fmt='%s'
+        )
+
+    except (HTTPError, requests.exceptions.RequestException) as e:
+        logger.info(e)
+        pass
     
 def gates_calculation(park_gdf, gates_df, output_path_bbox, park_gates_osm_buffer_m, park_gates_virtual_distance_m, streets=None, gate_source='A'):
     
@@ -586,12 +999,10 @@ def gates_calculation(park_gdf, gates_df, output_path_bbox, park_gates_osm_buffe
 # Funzione per evitare troppe richieste OSM
 # ------------------------------------------------------------
     
-def safe_osm_query(bbox_4326_tassello, tags, pause=15, max_retries=8):
+def safe_osm_query(aoi_bbox_4326, tags, pause=15, max_retries=8):
 
-    south, west, north, east = bbox_4326_tassello
-    overpass = Overpass()
-    
     # costruisci query
+    south, west, north, east = aoi_bbox_4326
     query = f"""
     (
       node({south},{west},{north},{east})[{tags}];
@@ -601,7 +1012,7 @@ def safe_osm_query(bbox_4326_tassello, tags, pause=15, max_retries=8):
 
     for attempt in range(max_retries):
         try:
-            response = overpass.query(query, timeout=200)
+            response = overpass_query(aoi_bbox_4326,query)
             
             # Se Overpass restituisce oggetti, anche vuoti → stop retry
             data = []
@@ -635,17 +1046,11 @@ def safe_osm_query(bbox_4326_tassello, tags, pause=15, max_retries=8):
 # ------------------------------------------------------------
 # Gestione completa dei gates
 # ------------------------------------------------------------
-def handle_gates(gate_source, bbox_tassello, output_path_bbox,  gates, park=None, streets=None, park_csv_path_local=None,park_gates_osm_buffer_m = 10, park_gates_virtual_distance_m = 100):
+def handle_gates(gate_source, aoi_bbox, output_path_bbox,  gates, park=None, streets=None, park_csv_path_local=None,park_gates_osm_buffer_m = 10, park_gates_virtual_distance_m = 100):
     
     os.makedirs(os.path.dirname(park_csv_path_local), exist_ok=True)
 
-    """
-    Scarica i park da OSM per la bbox e ritorna un GeoDataFrame.
-    """
-    overpass = Overpass()
-    south, west, north, east = bbox_tassello
-    south, west, north, east = round(south, 6), round(west, 6), round(north, 6), round(east, 6)
-
+    south, west, north, east = aoi_bbox
     with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
     park_tags = osm_tags["park"]
@@ -665,7 +1070,7 @@ def handle_gates(gate_source, bbox_tassello, output_path_bbox,  gates, park=None
 
     for attempt in range(8):
         try:
-            result = overpass.query(query)
+            result = overpass_query(aoi_bbox,query)
             # Risposta ricevuta → stop retry
             break
         except Exception as e:
@@ -701,21 +1106,21 @@ def handle_gates(gate_source, bbox_tassello, output_path_bbox,  gates, park=None
         result_gdf = gates_calculation(park, gates,output_path_bbox,park_gates_osm_buffer_m, park_gates_virtual_distance_m, None, gate_source)
     elif gate_source == "road_intersect":
         if streets is None:
-            streets = download_streets(bbox_tassello)           
+            streets = download_streets(aoi_bbox)           
             streets = streets.set_crs(EPSG_GATE)
             streets = streets.to_crs(EPSG_METRIC)        
         result_gdf = gates_calculation(park, None, output_path_bbox, park_gates_osm_buffer_m, park_gates_virtual_distance_m, streets, gate_source)
     else:
         result_gdf = gates_calculation(park, None, output_path_bbox,park_gates_osm_buffer_m, park_gates_virtual_distance_m, None, gate_source)
     
-    result_gdf.to_csv(park_csv_path_local, index=False)
+    #result_gdf.to_csv(park_csv_path_local, index=False)
+    return result_gdf
 
 
 def download_streets(bbox):
-    overpass = Overpass()
-    south, west, north, east = bbox
-    south, west, north, east = round(south,6), round(west,6), round(north,6), round(east,6)
+
     # Query Overpass: tutte le way con qualunque valore di 'highway'
+    south, west, north, east = bbox
     query = f"""
     (
       way({south},{west},{north},{east})[highway];
@@ -729,7 +1134,7 @@ def download_streets(bbox):
 
     for attempt in range(8):
         try:
-            result = overpass.query(query)
+            result =  overpass_query(bbox,query)
             # Risposta ricevuta con codice 200 → interrompo i retry
             break
         except Exception as e:
@@ -790,156 +1195,259 @@ def download_streets(bbox):
 # -----------------------------------------------------------------------------------------------------------------------------------
 
 
-def download_network_osm(bbox_tassello, output_path_bbox,access_key, secret_key, endpoint_url, output_minio_path, mode = 'walk', weight='time'):
+def download_network_osm(
+    aoi_bbox,
+    output_path_bbox,
+    access_key,
+    secret_key,
+    endpoint_url,
+    output_minio_path,
+    network_edges,
+    network_nodes,
+    mode='walk',
+    weight='time'
+):
 
-          
-    if not os.path.exists("{}/osm_network".format(output_path_bbox)):
-        os.makedirs("{}/osm_network".format(output_path_bbox))
-    local_folder = f"{output_path_bbox}/osm_network"   
+    logger.info("DOWNLOAD NETWORK start.")
+    logger.info("-" * 120)
 
-    if access_key and secret_key and endpoint_url:
+    # ==================================================
+    # LOCAL PATHS
+    # ==================================================
 
-        bucket_name, filepath = split_path(output_path_bbox)
-        
+    local_folder = os.path.join(output_path_bbox, "osm_network")
+    os.makedirs(local_folder, exist_ok=True)
+
+    local_nodes = os.path.join(local_folder, "nodes.csv")
+    local_edges = os.path.join(local_folder, "edges.csv")
 
 
-        nodes_exists = minio_file_exists(
-            bucket=bucket_name,
-            object_key=f"{filepath}/osm_network/nodes.csv",
-            endpoint_url=endpoint_url,
-            access_key=access_key,
-            secret_key=secret_key
-        )
-        
-        edges_exists = minio_file_exists(
-            bucket=bucket_name,
-            object_key=f"{filepath}/osm_network/edges.csv",
-            endpoint_url=endpoint_url,
-            access_key=access_key,
-            secret_key=secret_key
-        )
+    if network_edges or network_nodes:
 
-        if nodes_exists and edges_exists:
-            logger.info("OSM network already exists on MinIO, skipping download.")
+        logger.info("Network input specified, skipping OSM generation.")
 
-            bucket_name, filepath_minio = split_path(output_minio_path)
+        # -----------------------------
+        # EDGES
+        # -----------------------------
+        if network_edges:
+            if is_minio_path(network_edges):
+                
+                copy_from_minio(
+                     network_edges,
+                     local_edges,
+                     access_key,
+                     secret_key,
+                     endpoint_url
+                     )
 
-            minio_copy_prefix(
-                        bucket=bucket_name,
-                        source_prefix=f"{filepath}/osm_network/",
-                        dest_prefix=f"{filepath_minio}/osm_network",
-                        endpoint_url=endpoint_url,
-                        access_key=access_key,
-                        secret_key=secret_key
+            else:
+                shutil.copy2(network_edges, local_edges)
+
+        # -----------------------------
+        # NODES
+        # -----------------------------
+        if network_nodes:
+            if is_minio_path(network_nodes):
+                
+                copy_from_minio(
+                     network_nodes,
+                     local_nodes,
+                     access_key,
+                     secret_key,
+                     endpoint_url
+                     )
+            else:
+                shutil.copy2(network_nodes, local_nodes)
+
+        # -----------------------------
+        # OPTIONAL UPLOAD
+        # -----------------------------
+        if (
+            output_minio_path and
+            is_minio_path(network_nodes) and is_minio_path(network_edges) and
+            access_key and secret_key and endpoint_url
+        ):
+
+            
+             bucket_src, key_src = split_path(network_edges)
+             bucket_dst, prefix_dst = split_bucket_and_prefix(output_minio_path)
+
+             dest_key = f"{prefix_dst}/osm_network/edges.csv"
+
+             minio_copy_file(
+                 bucket_src,
+                 key_src,
+                 dest_key,
+                 endpoint_url,
+                 access_key,
+                 secret_key
+             )
+             bucket_src, key_src = split_path(network_nodes)
+             bucket_dst, prefix_dst = split_bucket_and_prefix(output_minio_path)
+
+             dest_key = f"{prefix_dst}/osm_network/nodes.csv"
+
+             minio_copy_file(
+                 bucket_src,
+                 key_src,
+                 dest_key,
+                 endpoint_url,
+                 access_key,
+                 secret_key
+             )
+
+
+        if (
+            output_minio_path  and
+            access_key and secret_key and endpoint_url
+        ):
+            
+            upload_on_minio(
+                local_nodes,
+                f"{output_minio_path}/osm_network/nodes.csv",
+                access_key,
+                secret_key,
+                endpoint_url
             )
-            return 0
+            upload_on_minio(
+                local_edges,
+                f"{output_minio_path}/osm_network/edges.csv",
+                access_key,
+                secret_key,
+                endpoint_url
+            )
 
-    if not os.path.isfile("{}/osm_network/nodes.csv".format(output_path_bbox)) or not os.path.isfile("{}/osm_network/edges.csv".format(output_path_bbox)):    
-        
-        logger.info('DOWNLOAD NETWORK start.')
-        logger.info('----------------------------------------------------------------------------------------------------------------')
-          
-        result_get_network, gdf_nodes, gdf_edges = get_network_osm(bbox_tassello, output_path_bbox)
-                     
-        tassello_nome = os.path.basename(output_path_bbox)
-        index = tassello_nome.replace('tassello', '') 
-        demPath = f'{output_path_bbox}/merged_dem_{index}.tif'
-    
-        if weight == 'time':           
-           logger.info('Calling the function calculate_edges_time_from_nodes.\n')
-           result, gdf_edges  = calculate_edges_time_from_nodes(gdf_edges,  mode = 'walk')
-
-        #Salvo il file nodes
-        gdf_nodes['type'] = 'osm'
-        gdf_nodes.to_csv("{}/osm_network/nodes.csv".format(output_path_bbox), index = False)     
-        #Salvo il file edges
-        columns_to_save = ["u", "v", "length", "time"]
-        for col in ["time"]:
-            if col not in gdf_edges.columns:
-                gdf_edges[col] = np.nan
-        gdf_edges[columns_to_save].to_csv(f"{output_path_bbox}/osm_network/edges.csv", index=False)
-        logger.info('----------------------------------------------------------------------------------------------------------------')     
-        logger.info('DOWNLOAD NETWORK end.\n')
-    
-        
-        if access_key and secret_key and endpoint_url: 
-            get_folder(local_folder,output_minio_path, access_key, secret_key, endpoint_url)
-        
-    else:
-        logger.info('Files nodes and edges already exists.\n')        
-        if access_key and secret_key and endpoint_url: 
-            get_folder(local_folder,output_minio_path, access_key, secret_key, endpoint_url)
+        logger.info("Reused network saved to output.")
+        logger.info("DOWNLOAD NETWORK end.")
         return 0
-			
-	
+
+    # ==================================================
+    # GENERATE NETWORK (DEFAULT BEHAVIOUR)
+    # ==================================================
+
+    logger.info("Generating OSM network...")
+
+    _, gdf_nodes, gdf_edges = get_network_osm(
+        aoi_bbox,
+        output_path_bbox
+    )
+
+    # ==================================================
+    # WEIGHT COMPUTATION
+    # ==================================================
+
+    if weight == "time":
+        _, gdf_edges = calculate_edges_time_from_nodes(
+            gdf_edges,
+            mode=mode
+        )
+
+    # ==================================================
+    # SAVE LOCAL
+    # ==================================================
+
+    gdf_nodes["type"] = "osm"
+    gdf_nodes.to_csv(local_nodes, index=False)
+
+    cols = ["u", "v", "length", "time"]
+    if "time" not in gdf_edges.columns:
+        gdf_edges["time"] = np.nan
+
+    gdf_edges[cols].to_csv(local_edges, index=False)
+
+    logger.info("Network saved locally.")
+
+    # ==================================================
+    # OPTIONAL UPLOAD
+    # ==================================================
+
+    if (
+        output_minio_path  and
+        access_key and secret_key and endpoint_url
+    ):
+        upload_on_minio(
+            local_nodes,
+            f"{output_minio_path}/osm_network/nodes.csv",
+            access_key,
+            secret_key,
+            endpoint_url
+        )
+        upload_on_minio(
+            local_edges,
+            f"{output_minio_path}/osm_network/edges.csv",
+            access_key,
+            secret_key,
+            endpoint_url
+        )
+
+        logger.info("Uploaded network to MinIO.")
+
+    logger.info("DOWNLOAD NETWORK end.")
+    return 0
+
         
 # -----------------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------------
 
 
-def get_network_osm(bbox_tassello, output_path_bbox,retries=3,sleep_seconds=1):
+def get_network_osm(aoi_bbox, output_path_bbox, retries=3, sleep_seconds=1):
     last_exc = None
 
     for attempt in range(1, retries + 1):
         try:
             logger.info(f"OSM network download attempt {attempt}/{retries}")
 
-            network = osm.pdna_network_from_bbox(
-                bbox_tassello[0],
-                bbox_tassello[1],
-                bbox_tassello[2],
-                bbox_tassello[3],
+            south, west, north, east = aoi_bbox
+
+            bbox_osmnx = (west, south, east, north)
+
+            G = ox.graph_from_bbox(
+                bbox_osmnx,
                 network_type="walk",
-                two_way=False
+                simplify=True
+            )
+            
+            gdf_nodes, gdf_edges = ox.graph_to_gdfs(
+                G, nodes=True, edges=True
             )
 
             # ---------- NODES ----------
-            df_nodes = network.nodes_df.reset_index()
-
-            gdf_nodes = geopandas.GeoDataFrame(df_nodes)
-
-            # ---------- EDGES ----------
-            df_edges = network.edges_df.reset_index()
-            df_edges.rename(
-                columns={"from": "u", "to": "v", "distance": "length"},
-                inplace=True
+            gdf_nodes = (
+                gdf_nodes
+                .reset_index()
+                .rename(columns={"osmid": "id"})
             )
 
-            nodes = df_nodes.set_index("id")
+            # ---------- EDGES ----------
+            gdf_edges = (
+                gdf_edges
+                .reset_index()
+                .rename(columns={"length": "length"})
+            )
 
-            gdf_edges = geopandas.GeoDataFrame(df_edges)
-            gdf_edges['geometry'] = df_edges.apply(lambda row: crea_linestring(row, nodes), axis=1)
-            logger.info("OSM network successfully downloaded.")
+            logger.info("OSM network successfully downloaded (osmnx).")
             return 0, gdf_nodes, gdf_edges
 
         except Exception as e:
             last_exc = e
             logger.warning(f"Attempt {attempt} failed: {e}")
-
             if attempt < retries:
                 time.sleep(sleep_seconds)
 
     # ------------------------------------------------------------------
-    # FALLBACK: network non disponibile → DATAFRAME VALIDI MA VUOTI
+    # FALLBACK
     # ------------------------------------------------------------------
     logger.error("All retries failed. Creating empty OSM network.")
 
-    # NODES fallback
     gdf_nodes = geopandas.GeoDataFrame(
-        columns=["id", "x", "y", "geometry"],
+        columns=["id", "geometry"],
         geometry="geometry",
         crs=EPSG_4326
     )
 
-    # EDGES fallback
     gdf_edges = geopandas.GeoDataFrame(
-        {
-            "u": [],
-            "v": [],
-            "length": [],
-            "time": []
-        },
-        geometry=[],
+        columns=["u", "v", "length", "geometry"],
+        geometry="geometry",
         crs=EPSG_4326
     )
 
@@ -985,9 +1493,7 @@ def calculate_edges_time_from_nodes(gdf_edges, mode = 'walk'):
     gdf_edges = gdf_edges.dropna(subset=['geometry']) 
                 
     slope_abs = gdf_edges['slope'].abs()
-    logger.info(f"Value max of |slope|: {slope_abs.max()}\n")
-    logger.info(f"Value min of |slope|: {slope_abs.min()}\n")
-    logger.info(f"Value medium of |slope|: {slope_abs.mean()}\n")
+
     for index, row in gdf_edges.iterrows():
        
         velocita = coefficiente * math.exp(-3.5 * abs(gdf_edges.at[index, 'slope'] + 0.05))
@@ -1022,7 +1528,7 @@ def walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpo
             velocita = (bike_speed_kmh / 3.6)
             peso = DISTMAX_BIKE  
 
-    if access_key and secret_key and endpoint_url and is_minio_path(output_path_bbox):
+    if access_key and secret_key and endpoint_url:
         
         bucket_name, filepath_minio = split_path(output_minio_path)
 
@@ -1072,7 +1578,7 @@ def walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpo
                 if os.path.isdir(folder):
                     csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
             
-            csv_files = sorted(csv_files)
+            #csv_files = sorted(csv_files)
             
             list_string = []
             pois = []
@@ -1130,20 +1636,57 @@ def walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpo
 #COMPUTO
 
 
-def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,custom_names,custom_csvs,grid_gpkg,poi_category_osm, clip_layer, filename,access_key,secret_key,endpoint_url,
+def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custom_names,custom_csvs,grid_gpkg,poi_category_osm, clip_layer, filename,access_key,secret_key,endpoint_url,
  poi_category_custom_style,output_minio_path,virtual_nodes,output_format,output_EPSG, bike_speed_kmh, walk_speed_kmh,mode = 'walk', weight='time'):
             
-    bbox = json.loads(bbox_tassello)
+    bbox = json.loads(aoi_bbox)
     grid_folder = os.path.join(output_path_bbox, "grid")
+    grid = None
+
     if grid_gpkg:
+    
         logger.info(f"Loading existing grid: {grid_gpkg}")
-        grid = geopandas.read_file(grid_gpkg)
-        if access_key and secret_key and endpoint_url:  
-            outputPath_grid = os.path.join(grid_folder, "grid.gpkg")
-            grid.to_file(outputPath_grid, driver="GPKG")   
-            minio_path = os.path.join(output_minio_path, "grid")             
-            get_folder(outputPath_grid, minio_path,access_key, secret_key, endpoint_url)
+    
+        if is_minio_path(grid_gpkg):
+    
+            b, k = split_path(grid_gpkg)
+    
+            s3 = get_s3_client(access_key, secret_key, endpoint_url)
+    
+            with tempfile.NamedTemporaryFile(suffix=".gpkg") as tmp:
+    
+                s3.download_file(b, k, tmp.name)
+                grid = geopandas.read_file(tmp.name)
+
+    
+        else:
+    
+            grid = geopandas.read_file(grid_gpkg)
+    
+        grid = grid.to_crs(EPSG_4326)
+
+        # Salva sempre la griglia nella cartella grid, sia locale che dopo il download da MinIO
+        
+        outputPath_grid = os.path.join(grid_folder, "grid.gpkg")
+        grid.to_file(outputPath_grid, layer="grid", driver="GPKG")
+        
+        # Copia opzionale su MinIO dopo il salvataggio locale
+        if access_key and secret_key and endpoint_url:
+            src_bucket, src_prefix = split_path(grid_gpkg)
+            dst_bucket, dst_prefix = split_path(output_minio_path)
+            
+            minio_upload_path = f"{dst_bucket}/{dst_prefix.rstrip('/')}/grid/grid.gpkg"
+
+            upload_on_minio(
+                outputPath_grid,
+                minio_upload_path,
+                access_key,
+                secret_key,
+                endpoint_url
+            )    
     else:
+
+        logger.info("Generating grid...")
         lon = []
         lat= []
         rLon = longitudine_gradi(bbox, hex_radius_m )
@@ -1168,24 +1711,31 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         centri = geopandas.GeoDataFrame(centri, geometry=gs, crs=EPSG_4326)
         centri = centri.to_crs(CRS_3857)
         #Voronoi 
-        transformer = Transformer.from_crs(EPSG_4326,EPSG_3857, always_xy=True)
+        transformer = Transformer.from_crs(EPSG_4326,EPSG_METRIC, always_xy=True)
         xmin,ymin = transformer.transform(bbox[1],bbox[0])
         xmax,ymax = transformer.transform(bbox[3]+1.5*rLon,bbox[2]+np.sqrt(3)/2*rLat)
         boundary_shape = shapely.geometry.box(xmin,ymin,xmax,ymax, ccw=True)
         
         #### ONLY ATHENS
-        #boundary_shape = shapely.geometry.box(xmin, ymin, xmax, ymax, ccw=True).buffer(200)
-        #
-        #try:
-        #    region_polys, region_pts = voronoi_regions_from_coords(centri.geometry, boundary_shape)
-        #except Exception as e:
-        #    logger.info("❌ Errore in voronoi_regions_from_coords:", e)
-        #    logger.info("Numero centri:", len(centri))
-        #    logger.info("BBox:", bbox)
-        #    return 1
-        #### ONLY ATHENS
         
-        region_polys, region_pts = voronoi_regions_from_coords(centri.geometry, boundary_shape)  
+        keywords = ["athens", "ath", "athen"]
+        ath = False
+        for p in [output_path_bbox, output_minio_path]:
+            if p and any(k in p.lower() for k in keywords):
+                ath =  True
+        if ath:
+            boundary_shape = shapely.geometry.box(xmin, ymin, xmax, ymax, ccw=True).buffer(200)
+            
+            try:
+                region_polys, region_pts = voronoi_regions_from_coords(centri.geometry, boundary_shape)
+            except Exception as e:
+                logger.info("❌ Errore in voronoi_regions_from_coords:", e)
+                logger.info("Numero centri:", len(centri))
+                logger.info("BBox:", bbox)
+                return 1
+        #### ONLY ATHENS
+        else:
+            region_polys, region_pts = voronoi_regions_from_coords(centri.geometry, boundary_shape)  
         geom = list(region_polys.values())
         df = pd.DataFrame(geom, columns=['geometry'])
         grid = geopandas.GeoDataFrame(df, crs=CRS_3857) 
@@ -1200,39 +1750,102 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             
                 centri = (centri.drop(i))
         
+        
         #grid = geopandas.sjoin(grid, centri, how='inner', op ='contains')
         grid = geopandas.sjoin(grid, centri, how='inner', predicate='contains')
+
+        bbox = json.loads(aoi_bbox)
+
+        # bbox originale in EPSG:4326 -> la trasformo in EPSG:3857
+        xmin0, ymin0 = transformer.transform(bbox[1], bbox[0])  # lon_min, lat_min
+        xmax0, ymax0 = transformer.transform(bbox[3], bbox[2])  # lon_max, lat_max
+        
+        # apotema dell'esagono (hex_radius_m è il raggio): r * sqrt(3)/2
+        apotema = float(hex_radius_m) * (np.sqrt(3) / 2.0)
+        
+        # bbox "interna" (tolgo un apotema su tutti i lati)
+        bbox_inner = shapely.geometry.box(
+            xmin0 + apotema,
+            ymin0 + apotema,
+            xmax0 - apotema,
+            ymax0 - apotema,
+            ccw=True
+        )
+        
+        # tengo solo gli esagoni il cui centroide è dentro la bbox interna
+        mask = grid.geometry.centroid.within(bbox_inner)
+        grid = grid.loc[mask].copy()
         
         grid = grid.to_crs(CRS_4326)
         
         grid = grid.drop('index_right', axis = 1)
-       
-
-        
         outputPath_grid = os.path.join(grid_folder, 'grid.gpkg')
         grid.to_file(
         outputPath_grid,
         layer="grid",
         driver="GPKG"
         )
-        if access_key and secret_key and endpoint_url:  
-            minio_path = os.path.join(output_minio_path, "grid") 
-            get_folder(outputPath_grid, minio_path,access_key, secret_key, endpoint_url)
+        if access_key and secret_key and endpoint_url:
+            grid_minio_path = f"{output_minio_path.rstrip('/')}/grid/grid.gpkg"
+            upload_on_minio(
+                outputPath_grid,
+                grid_minio_path,
+                access_key,
+                secret_key,
+                endpoint_url
+            )
+   
+            
             
     # Chiamata della funzione walkScore_min        
     result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpoint_url, output_minio_path,walk_speed_kmh, bike_speed_kmh, mode, weight)
     
     if walk_score is None or walk_score.empty:
-        ws = []
-        result = "{}/{}.csv".format(output_path_bbox, filename)
-        np.savetxt(result, ws, delimiter=';', fmt='%s', 
-        header = 
-        'geometry;overall_average;overall_max', 
-        comments='')
-        logger.info('The walkScore_min function does not return a ws to work on.')
-        if access_key and secret_key and endpoint_url: 
-            get_folder(result, output_minio_path,access_key, secret_key, endpoint_url)
+        logger.warning("walkScore_min returned no results. Generating EMPTY output.")
+    
+        output_dir = os.path.join(output_path_bbox, "output")
+        os.makedirs(output_dir, exist_ok=True)
+    
+        if output_format == "csv":
+            result = os.path.join(output_dir, f"{filename}.csv")
+            np.savetxt(
+                result,
+                [],
+                delimiter=';',
+                fmt='%s',
+                header='geometry;overall_average;overall_max',
+                comments=''
+            )
+    
+        elif output_format == "geojson":
+            empty = geopandas.GeoDataFrame(
+                {"overall_average": [], "overall_max": []},
+                geometry=[],
+                crs=output_EPSG
+            )
+            result = os.path.join(output_dir, f"{filename}.geojson")
+            empty.to_file(result, driver="GeoJSON")
+    
+        else:  # gpkg (default)
+            empty = geopandas.GeoDataFrame(
+                {"overall_average": [], "overall_max": []},
+                geometry=[],
+                crs=output_EPSG
+            )
+            result = os.path.join(output_dir, f"{filename}.gpkg")
+            empty.to_file(result, layer=filename, driver="GPKG")
+
+        if access_key and secret_key and endpoint_url and output_minio_path:
+            get_folder(
+                output_dir,
+                output_minio_path,
+                access_key,
+                secret_key,
+                endpoint_url
+            )
+    
         return 0
+
     else: 
         
     
@@ -1265,7 +1878,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
                 if os.path.isdir(folder):
                     csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
         
-            csv_files = sorted(csv_files)
+            #csv_files = sorted(csv_files)
         
             for f in csv_files:
                 name = os.path.splitext(os.path.basename(f))[0]
@@ -1276,10 +1889,12 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
         
         logger.info("POIs categories: %s", categories)
 
-        
+
                
        # Verify empty hexag
+
         if virtual_nodes:
+
             hexag = geopandas.sjoin(grid, walk_score, how='left', predicate = 'contains')
 
             hexag['missing_categories'] = hexag.apply(
@@ -1290,7 +1905,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             empty_hexag = hexag[hexag['missing_categories'].apply(len) > 0].copy()
             centroids_empty_hexag = empty_hexag.copy()
             centroids_empty_hexag['geometry'] = centroids_empty_hexag.geometry.centroid
-            
+
             attach_centroids_to_network(
                 centroids_empty_hexag,
                 output_path_bbox,
@@ -1300,23 +1915,25 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
                 secret_key,
                 endpoint_url
             )
-            # AGAIN            
+            # AGAIN
+            
             result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpoint_url, output_minio_path,walk_speed_kmh, bike_speed_kmh, mode, weight)
-            walk_score = geopandas.GeoDataFrame(walk_score, geometry = geopandas.points_from_xy(walk_score.x, walk_score.y))  
-
-       
+            walk_score = geopandas.GeoDataFrame(walk_score, geometry = geopandas.points_from_xy(walk_score.x, walk_score.y), crs=EPSG_4326 )  
+    
         hexag = geopandas.sjoin(grid, walk_score, how='inner', predicate = 'contains')
-        
-        
+     
+
         hexag = hexag.drop(columns=['highway'], errors='ignore')
         hexag = hexag.drop(columns=['type'], errors='ignore')
+        hexag = hexag.drop(columns=['ref'], errors='ignore')
+        hexag = hexag.drop(columns=['junction'], errors='ignore')
+        hexag = hexag.drop(columns=['railway'], errors='ignore')
+
         
         hexag = hexag.replace({'NaN' : np.nan})
-        
-        
         hexag = hexag.dissolve(by = hexag.index, aggfunc="mean")
         
-
+        
         for cat in categories:
             if 'minutes_{}'.format(cat) not in hexag.columns:
                 hexag['minutes_{}'.format(cat)] = np.nan
@@ -1325,7 +1942,6 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
                 if pd.notnull(row.get('media', np.nan)):
                     hexag.at[index, f'minutes_{poi_category_osm}'] = row['media']
                     
-        
         minutes_cols = [f'minutes_{c}' for c in categories]
 
         hexag['countNaN'] = hexag[minutes_cols].isnull().sum(axis=1)
@@ -1414,27 +2030,28 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
             cols_to_keep += ['overall_average', 'overall_max']
         
         # Se clip layer è fornito e valido
+
         
-        if clip_layer and is_minio_path(output_path_bbox):
+        if clip_layer and is_minio_path(clip_layer):
         
             try:
+                
                 bucket_name, clip_key = split_path(clip_layer)
                 s3 = get_s3_client(access_key, secret_key, endpoint_url)
                 
-                obj = s3.get_object(
-                    Bucket=bucket_name,
-                    Key=clip_key
-                )
-        
-
-                with tempfile.NamedTemporaryFile(suffix=".gpkg") as tmp:
-                    s3.download_fileobj(bucket_name, clip_key, tmp)
-                    tmp.flush()
+                tmp = tempfile.NamedTemporaryFile(suffix=".gpkg", delete=False)
+                tmp_path = tmp.name
+                tmp.close()   
                 
-                    clip_layer = geopandas.read_file(tmp.name)
-                    clip_layer = clip_layer.to_crs(EPSG_METRIC)
+                s3.download_fileobj(bucket_name, clip_key, open(tmp_path, "wb"))
+                
+                clip_layer = geopandas.read_file(tmp_path)
+                                
+                clip_layer = clip_layer.to_crs(hexag.crs)
                 
                 hexag_to_save = geopandas.clip(hexag, clip_layer)
+                                
+                os.remove(tmp_path)
 
         
             except Exception as e:
@@ -1443,7 +2060,7 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
                 hexag_to_save = hexag.copy()
 
             
-        elif clip_layer and os.path.isfile(clip_layer) and not is_minio_path(output_path_bbox):
+        elif clip_layer and os.path.isfile(clip_layer) and not is_minio_path(clip_layer):
             clip_layer = geopandas.read_file(clip_layer)
             clip_layer = clip_layer.to_crs(EPSG_METRIC)
             hexag_to_save = geopandas.clip(hexag, clip_layer)
@@ -1483,48 +2100,75 @@ def computo(bbox_tassello, latitude, longitude, hex_radius_m , output_path_bbox,
                 sep=';', index=False
             )
             
-        if access_key and secret_key and endpoint_url: 
-            get_folder(output_dir, output_minio_path,access_key, secret_key, endpoint_url)
+  
+        if access_key and secret_key and endpoint_url:
         
-            
-            get_folder("style", output_minio_path,access_key, secret_key, endpoint_url)
+            # 1) Upload output e style
+            get_folder(output_dir, output_minio_path, access_key, secret_key, endpoint_url)
+        
+            style_dir = os.path.join(os.getcwd(), "style")
+            if os.path.isdir(style_dir):
+                get_folder(style_dir, f"{output_minio_path}",
+                           access_key, secret_key, endpoint_url)
+        
+            # 2) Costruzione publish JSON
             parts = output_minio_path.split("/", 1)[1]
+        
+            publish_categories = categories.copy()
             if len(categories) > 1:
-                categories.append("overall_average")
-                categories.append("overall_max")
+                publish_categories.extend(["overall_average", "overall_max"])
+        
             publish_data = {
-                    "analysis": "15 minutes city index",
-                    "data": []
-                    }
-            
-            for category in categories:
+                "analysis": "15 minutes city index",
+                "data": []
+            }
+        
+            for category in publish_categories:
                 publish_data["data"].append({
                     "workspace": f"{filename}_{category}",
                     "store_name": f"{filename}_{category}",
-                    "data_path": f"{parts}/{filename}.{output_format}",
+                    "data_path": f"{parts}/output/{filename}.{output_format}",
                     "style_name": f"{category}",
                     "sld_path": f"{parts}/style/{category}.sld",
                     "write_on_catalogue": True,
                     "description": "15min analysis"
                 })
-            
+        
             if poi_category_custom_style:
                 style_name = os.path.splitext(os.path.basename(poi_category_custom_style))[0]
                 publish_data["data"].append({
                     "workspace": f"{filename}_{style_name}",
                     "store_name": f"{filename}_{style_name}",
-                    "data_path": f"{parts}/{style_name}.{output_format}",
-                    "style_name": f"{style_name}",
-                    "sld_path": f"{poi_category_custom_style}",
+                    "data_path": f"{parts}/output/{style_name}.{output_format}",
+                    "style_name": style_name,
+                    "sld_path": poi_category_custom_style,
                     "write_on_catalogue": True,
                     "description": "15min analysis"
                 })
-                
-            with open(f"{output_path_bbox}/_publish.json", "w", encoding="utf-8") as f:
+        
+            # 3) Scrittura _publish.json SEMPRE in locale
+            if is_minio_path(output_path_bbox):
+                tmpdir = tempfile.TemporaryDirectory()
+                local_publish_path = os.path.join(tmpdir.name, "_publish.json")
+            else:
+                os.makedirs(output_path_bbox, exist_ok=True)
+                local_publish_path = os.path.join(output_path_bbox, "_publish.json")
+        
+            with open(local_publish_path, "w", encoding="utf-8") as f:
                 json.dump(publish_data, f, indent=2)
-                                    
-            get_folder(f"{output_path_bbox}/_publish.json", output_minio_path,access_key, secret_key, endpoint_url)
+        
             
+            minio_publish_path = f"{output_minio_path}/_publish.json"
+            
+            upload_on_minio(
+                local_publish_path,
+                f"{output_minio_path}/_publish.json",
+                access_key,
+                secret_key,
+                endpoint_url
+            )
+            
+                    
         return 0
 
                    
@@ -1542,9 +2186,9 @@ def attach_centroids_to_network(centri, output_path_bbox, mode,output_minio_path
         coefficiente = COEFFICIENT_WALK
     else:
         coefficiente = COEFFICIENT_BIKE
-    
 
-    if access_key and secret_key and endpoint_url and is_minio_path(output_path_bbox):
+    if access_key and secret_key and endpoint_url:
+        
         
         bucket_name, filepath_minio = split_path(output_minio_path)
 
@@ -1560,6 +2204,7 @@ def attach_centroids_to_network(centri, output_path_bbox, mode,output_minio_path
         )
         #edges = pd.read_csv(BytesIO(obj["Body"].read()), index_col=[0,1])
         edges = pd.read_csv(BytesIO(obj["Body"].read()))
+
     else:
         nodes = pd.read_csv(f"{output_path_bbox}/osm_network/nodes.csv", index_col=0)
         edges = pd.read_csv(f"{output_path_bbox}/osm_network/edges.csv", index_col=[0,1]).reset_index()
@@ -1671,9 +2316,9 @@ def attach_centroids_to_network(centri, output_path_bbox, mode,output_minio_path
     nodes_to_save.index.name = 'id'
     nodes_to_save = nodes_to_save.drop(columns='geometry')
     edges_to_save = edges_updated[['u', 'v', 'length', 'time']]
-    logger.info(f"edges dtypes:\n{edges_updated[['u','v','length','time']].dtypes}")
 
-    if access_key and secret_key and endpoint_url and is_minio_path(output_path_bbox):
+    if access_key and secret_key and endpoint_url and output_minio_path:
+
         bucket_name, base_prefix = split_path(output_minio_path)
     
         s3 = get_s3_client(access_key, secret_key, endpoint_url)
@@ -1713,3 +2358,5 @@ def attach_centroids_to_network(centri, output_path_bbox, mode,output_minio_path
             f"{output_path_bbox}/osm_network/edges.csv",
             index=False
         )
+
+
