@@ -118,31 +118,44 @@ def validate_api_params(params: dict):
         osm_tags = json.load(f)
 
     valid_poi_category_osm = set(osm_tags.keys()) | {"all"}
-
-    # Default: all categories
-    if not poi_category_osm or poi_category_osm.lower().strip() == "all":
-        poi_category_osm_list = valid_poi_category_osm.copy()
+    has_osm = bool(poi_category_osm and poi_category_osm.strip())
+    has_custom = bool(poi_category_custom_name and poi_category_custom_name.strip())
+    
+    if has_osm:
+        
+        if poi_category_osm.lower().strip() == "all":
+            poi_category_osm_list = valid_poi_category_osm.copy()
+        
+        else:
+            poi_category_osm_list = [
+                c.strip().lower()
+                for c in poi_category_osm.split(";")
+                if c.strip()
+            ]
+    
+            invalid_categories = [
+                c for c in poi_category_osm_list
+                if c not in valid_poi_category_osm
+            ]
+    
+            if invalid_categories:
+                raise_error(
+                    "ERR_007",
+                    extra=(
+                        f"Invalid POI category(ies): {', '.join(invalid_categories)} | "
+                        f"Valid values: {'; '.join(valid_poi_category_osm)} | all"
+                    )
+                )
     
     else:
-        poi_category_osm_list = [
-            c.strip().lower()
-            for c in poi_category_osm.split(";")
-            if c.strip()
-        ]
-    
-        invalid_categories = [
-            c for c in poi_category_osm_list
-            if c not in valid_poi_category_osm
-        ]
-    
-        if invalid_categories:
-            raise_error(
-                "ERR_007",
-                extra=(
-                    f"Invalid POI category(ies): {', '.join(invalid_categories)} | "
-                    f"Valid values: {'; '.join(valid_poi_category_osm)} | all"
-                )
-            )
+        # nessun OSM passato
+        if not has_custom:
+            # niente custom → default = ALL OSM
+            poi_category_osm_list = valid_poi_category_osm.copy()
+        else:
+            # solo custom → niente OSM
+            poi_category_osm_list = []
+
 
     poi_osm_path = poi.get("poi_osm_path")
     if poi_osm_path:
@@ -170,9 +183,10 @@ def validate_api_params(params: dict):
     custom_names = ["".join(x.lower().split()) for x in poi_category_custom_name.split(",")] if poi_category_custom_name else []
     custom_csvs = [x.strip() for x in poi_category_custom_csv.split(",")] if poi_category_custom_csv else []
     custom_styles = [x.strip() for x in poi_category_custom_style.split(",")] if poi_category_custom_style else []
-
+    
+    
     conflicting_custom = [name for name in custom_names if name in valid_poi_category_osm]
-    if conflicting_custom:
+    if conflicting_custom and poi_category_osm:
         raise_error("ERR_008", extra="custom category cannot match OSM category")
 
     if custom_names or custom_csvs:
@@ -393,29 +407,45 @@ def validate_parameters(parameters_file):
     # Valid OSM categories
     valid_poi_category_osm = set(osm_tags.keys()) | {"all"}
     
-    if not poi_category_osm or poi_category_osm.lower().strip() == "all":
-        poi_category_osm_list = valid_poi_category_osm.copy()
+# --- OSM CATEGORY HANDLING ---
+
+    has_osm = bool(poi_category_osm and poi_category_osm.strip())
+    has_custom = bool(poi_category_custom_name and poi_category_custom_name.strip())
+    
+    if has_osm:
+        
+        if poi_category_osm.lower().strip() == "all":
+            poi_category_osm_list = valid_poi_category_osm.copy()
+        
+        else:
+            poi_category_osm_list = [
+                c.strip().lower()
+                for c in poi_category_osm.split(";")
+                if c.strip()
+            ]
+    
+            invalid_categories = [
+                c for c in poi_category_osm_list
+                if c not in valid_poi_category_osm
+            ]
+    
+            if invalid_categories:
+                raise_error(
+                    "ERR_007",
+                    extra=(
+                        f"Invalid POI category(ies): {', '.join(invalid_categories)} | "
+                        f"Valid values: {'; '.join(valid_poi_category_osm)} | all"
+                    )
+                )
     
     else:
-        poi_category_osm_list = [
-            c.strip().lower()
-            for c in poi_category_osm.split(";")
-            if c.strip()
-        ]
-    
-        invalid_categories = [
-            c for c in poi_category_osm_list
-            if c not in valid_poi_category_osm
-        ]
-    
-        if invalid_categories:
-            raise_error(
-                "ERR_007",
-                extra=(
-                    f"Invalid POI category(ies): {', '.join(invalid_categories)} | "
-                    f"Valid values: {'; '.join(valid_poi_category_osm)} | all"
-                )
-            )
+        # nessun OSM passato
+        if not has_custom:
+            # niente custom → default = ALL OSM
+            poi_category_osm_list = valid_poi_category_osm.copy()
+        else:
+            # solo custom → niente OSM
+            poi_category_osm_list = []
 
     poi_osm_path = poi_parameters.get("poi_osm_path")
     if poi_osm_path:
@@ -441,9 +471,8 @@ def validate_parameters(parameters_file):
     custom_csvs = [x.strip() for x in poi_category_custom_csv.split(",")] if poi_category_custom_csv else []
     custom_styles = [x.strip() for x in poi_category_custom_style.split(",")] if poi_category_custom_style else []
 
-
     conflicting_custom = [name for name in custom_names if name in valid_poi_category_osm]
-    if conflicting_custom:
+    if conflicting_custom and poi_category_osm:
         raise_error(
             "ERR_008",
             extra="custom category cannot match OSM category"
