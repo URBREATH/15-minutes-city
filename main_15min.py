@@ -19,7 +19,7 @@ from scripts.storage_minio import (
     is_minio_path,
     split_path, get_s3_client
 )
-
+from scripts.storage_minio import sync_minio, split_path
 from io import BytesIO
 
 warnings.filterwarnings("ignore")
@@ -39,6 +39,8 @@ default_park_gates_osm_buffer_m = 10.0
 default_park_gates_csv = None
 default_park_gates_virtual_distance_m = 100.0
 default_hex_diameter_m = 250.0
+default_virtual_nodes = "false"
+default_poi_category_custom_name = 'all'
 # ------------------------------------------------
 # UTILITY FUNCTIONS
 # ------------------------------------------------
@@ -99,8 +101,16 @@ def run_analysis(params: dict):
     custom_csvs = [x.strip() for x in poi_category_custom_csv.split(",")] if poi_category_custom_csv else []
 
 
-    poi_category_osm = poi.get('poi_category_osm') or ('all' if not poi.get('poi_category_custom_name') else None)
+    poi_category_osm = poi.get('poi_category_osm') or (default_poi_category_custom_name if not poi.get('poi_category_custom_name') else None)
 
+
+    poi_category_complementary_name = poi.get('poi_category_complementary_name')
+    poi_category_complementary_csv =poi.get('poi_category_complementary_csv')
+    poi_category_complementary_style =poi.get('poi_category_complementary_style')
+
+    complementary_names = ["".join(x.lower().split()) for x in poi_category_complementary_name.split(",")] if poi_category_complementary_name else []
+    complementary_csvs = [x.strip() for x in poi_category_complementary_csv.split(",")] if poi_category_complementary_csv else []
+    
     bbox = aoi['bbox']
 
     if isinstance(bbox, str):
@@ -128,9 +138,9 @@ def run_analysis(params: dict):
     output_local_path = execution.get('output_local_path')
     grid_gpkg = grid.get('grid_gpkg')
     clip_layer = grid.get('clip_layer')
-    virtual_nodes = grid.get("virtual_nodes", "false").strip().lower() == "true"
+    virtual_nodes = grid.get("virtual_nodes", default_virtual_nodes).strip().lower() == "true"
     filename = execution.get('filename')
-    poi_category_custom_style = execution.get('poi_category_custom_style')
+    poi_category_custom_style = poi.get('poi_category_custom_style')
     
     effective_params = {
         "bbox": aoi['bbox'],
@@ -152,6 +162,10 @@ def run_analysis(params: dict):
         "poi_category_osm": poi_category_osm,
         "custom_names": custom_names,
         "custom_csvs": custom_csvs,
+        "custom_styles": poi_category_custom_style,
+        "complementary_names":complementary_names,
+        "complementary_csvs": complementary_csvs,
+        "complementary_styles": poi_category_complementary_style,
     
         "park_gates_source": park_gates_source,
         "park_gates_osm_buffer_m": park_gates_osm_buffer_m,
@@ -176,20 +190,20 @@ def run_analysis(params: dict):
     # ------------------------------------------------
     
     
-    for sub in ["grid", "osm_network", "osm_poi", "custom_poi", "output", "style"]:
+    for sub in ["grid", "osm_network", "osm_poi", "custom_poi", "complementary_poi" ,"output", "style"]:
         shutil.rmtree(os.path.join(output_local_path, sub), ignore_errors=True)
 
-    create_bbox(
-        bbox,
-        output_local_path,
+    
+    grid_folder = create_bbox(bbox, output_local_path, float(hex_diameter_m))
+    
+    # upload finale
+    sync_minio(
+        "upload",
+        grid_folder,
         new_path_output_minio_path,
-        float(hex_diameter_m),
-        access_key,
-        secret_key,
-        endpoint_url
+        access_key, secret_key, endpoint_url,
     )
 
-    
 
     if output_local_path:
         if is_minio_path(output_local_path):
@@ -204,58 +218,113 @@ def run_analysis(params: dict):
     # DOWNLOAD
     # ------------------------------------------------
     t0_download = print_start("DOWNLOAD")
-
-    grid_ref_path = execution.get('output_local_path')
-    if is_minio_path(grid_ref_path):
-        
-        bucket, prefix = split_path(grid_ref_path)
-        key = f"{prefix.rstrip('/')}/grid/grid_parameter.csv"
-    
-        s3 = get_s3_client(access_key, secret_key, endpoint_url)
-        obj = s3.get_object(Bucket=bucket, Key=key)
-    
-        tile = pd.read_csv(
-            BytesIO(obj["Body"].read()),
-            sep=';',
-            header=0
-        )
-    else:
-        grid_folder = os.path.join(grid_ref_path, "grid")
-        bbox_file = os.path.join(grid_folder, "grid_parameter.csv")
-        tile = pd.read_csv(bbox_file, sep=';', header=0)
-
-
+    # 1. leggi il grid_parameter.csv
+    bbox_file = os.path.join(output_local_path, "grid", "grid_parameter.csv")
+    tile = pd.read_csv(bbox_file, sep=';', header=0)
     aoi_bbox = tile.at[0, 'downloadBBox']
-
+    #_staging è una cartella temporanea di lavoro dove vengono "parcheggiati" i file scaricati da MinIO prima di essere usati dallo script.
+    stage_dir = os.path.join(output_local_path, "_staging")
+    # _ per gli input network_edgesedges_in.csvArchi del grafo stradale (input rete)
+    # --- NETWORK EDGES ---
+    network_edges_local = network_edges
+    if network_edges and is_minio_path(network_edges):
+        network_edges_local = os.path.join(stage_dir, "edges_in.csv")
+        sync_minio("download", network_edges_local, network_edges,
+                   access_key, secret_key, endpoint_url)
+    
+    # --- NETWORK NODES ---
+    network_nodes_local = network_nodes
+    if network_nodes and is_minio_path(network_nodes):
+        network_nodes_local = os.path.join(stage_dir, "nodes_in.csv")
+        sync_minio("download", network_nodes_local, network_nodes,
+                   access_key, secret_key, endpoint_url)
+    
+    # --- POI OSM PATH ---
+    poi_osm_path_local = poi_osm_path
+    if poi_osm_path and is_minio_path(poi_osm_path):
+        poi_osm_path_local = os.path.join(stage_dir, "poi_osm_in")
+        sync_minio("download", poi_osm_path_local, poi_osm_path,
+                   access_key, secret_key, endpoint_url)
+    
+    # --- PARK GATES CSV ---
+    park_gates_csv_local = park_gates_csv
+    if park_gates_csv and is_minio_path(park_gates_csv):
+        park_gates_csv_local = os.path.join(stage_dir, "park_gates.csv")
+        sync_minio("download", park_gates_csv_local, park_gates_csv,
+                   access_key, secret_key, endpoint_url)
+    
+    # --- CUSTOM CSVs ---
+    # Indice i nel nome → custom_0.csv, custom_1.csv, ecc., perché possono essercene N e ti serve un nome univoco.
+    custom_csvs_local = []
+    for i, p in enumerate(custom_csvs or []):
+        if p and is_minio_path(p):
+            local_p = os.path.join(stage_dir, f"custom_{i}.csv")
+            sync_minio("download", local_p, p,
+                       access_key, secret_key, endpoint_url)
+            custom_csvs_local.append(local_p)
+        else:
+            custom_csvs_local.append(p)
+    
+    # --- COMPLEMENTARY CSVs ---
+    complementary_csvs_local = []
+    for i, p in enumerate(complementary_csvs or []):
+        if p and is_minio_path(p):
+            local_p = os.path.join(stage_dir, f"complementary_{i}.csv")
+            sync_minio("download", local_p, p,
+                       access_key, secret_key, endpoint_url)
+            complementary_csvs_local.append(local_p)
+        else:
+            complementary_csvs_local.append(p)
+    
+    # 3. CORE: download senza parametri MinIO
     download(
         aoi_bbox,
         output_local_path,
         custom_names,
-        custom_csvs,
+        custom_csvs_local,
         poi_category_osm,
-        access_key,
-        secret_key,
-        endpoint_url,        
-        new_path_output_minio_path,
-        network_edges,
-        network_nodes,
-        poi_osm_path,        
+        complementary_names,
+        complementary_csvs_local,         
+        network_edges_local,
+        network_nodes_local,
+        poi_osm_path_local,
         mode,
         weight,
         park_gates_source,
         park_gates_osm_buffer_m,
-        park_gates_csv,
-        park_gates_virtual_distance_m
+        park_gates_csv_local,
+        park_gates_virtual_distance_m,
     )
-
+    
+    # 4. UPLOAD finale di tutto ciò che ha prodotto il download
+    if new_path_output_minio_path:
+        for sub in ["osm_network", "osm_poi", "custom_poi"]:
+            sync_minio(
+                "upload",
+                os.path.join(output_local_path, sub),
+                new_path_output_minio_path,
+                access_key, secret_key, endpoint_url,
+            )
+    
     print_end("DOWNLOAD", t0_download)
-
     # ------------------------------------------------
     # EXECUTION
     # ------------------------------------------------
     t0_computo = print_start("EXECUTION")
-
-        
+    
+    # staging input opzionali
+    grid_gpkg_local = grid_gpkg
+    if grid_gpkg and is_minio_path(grid_gpkg):
+        grid_gpkg_local = os.path.join(stage_dir, "grid_in.gpkg")
+        sync_minio("download", grid_gpkg_local, grid_gpkg,
+                   access_key, secret_key, endpoint_url)
+    
+    clip_layer_local = clip_layer
+    if clip_layer and is_minio_path(clip_layer):
+        clip_layer_local = os.path.join(stage_dir, "clip_in.gpkg")
+        sync_minio("download", clip_layer_local, clip_layer,
+                   access_key, secret_key, endpoint_url)
+    
     computo(
         aoi_bbox,
         tile.at[0, 'latitude'],
@@ -263,15 +332,15 @@ def run_analysis(params: dict):
         tile.at[0, 'hex_radius_m'],
         output_local_path,
         custom_names,
-        custom_csvs,
-        grid_gpkg,
+        custom_csvs_local,
+        grid_gpkg_local,
         poi_category_osm,
-        clip_layer,
+        clip_layer_local,
         filename,
-        access_key,
-        secret_key,
-        endpoint_url,
+        complementary_names,
+        complementary_csvs_local,
         poi_category_custom_style,
+        poi_category_complementary_style,
         new_path_output_minio_path,
         virtual_nodes,
         output_format,
@@ -282,7 +351,83 @@ def run_analysis(params: dict):
         weight
     )
 
+    if new_path_output_minio_path:
+        # 1) output e grid
+        for sub in ["output", "grid"]:
+            local_sub = os.path.join(output_local_path, sub)
+            if os.path.isdir(local_sub):
+                sync_minio(
+                    "upload",
+                    local_sub,
+                    new_path_output_minio_path,
+                    access_key, secret_key, endpoint_url,
+                )
+    
+    # 2) style: integrare SLD OSM di default DENTRO output_local_path/style
+    #    (in cui computo() ha già messo gli SLD custom/complementary)
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    default_style_dir = os.path.join(SCRIPT_DIR, "style")  
+    
+    style_dir = os.path.join(output_local_path, "style")
+    os.makedirs(style_dir, exist_ok=True)
+    
+    # Categorie OSM attive in questo run
+    if poi_category_osm and poi_category_osm.lower() != "all":
+        active_osm = [c.strip() for c in poi_category_osm.split(",") if c.strip()]
+    else:
+        # "all" → copio tutto ciò che trovo in default_style_dir
+        active_osm = None
+    
+    if os.path.isdir(default_style_dir):
+        for fname in os.listdir(default_style_dir):
+            src = os.path.join(default_style_dir, fname)
+            if not os.path.isfile(src):
+                continue
+    
+            base, ext = os.path.splitext(fname)
+            if ext.lower() != ".sld":
+                continue
+    
+            # Filtra: porto solo SLD per categorie OSM attive
+            # (oltre a overall_average / overall_max che servono sempre)
+            if active_osm is not None and base not in active_osm and base not in ("overall_average", "overall_max"):
+                continue
+    
+            dst = os.path.join(style_dir, fname)
+            if os.path.exists(dst):
+                # già presente (es. messo da computo per custom/complementary) → non sovrascrivere
+                logger.info(f"[style merge] keep existing: {dst}")
+                continue
+    
+            try:
+                shutil.copy2(src, dst)
+                logger.info(f"[style merge] copied: {src} → {dst}")
+            except PermissionError:
+                shutil.copyfile(src, dst)
+                logger.info(f"[style merge] copied (no metadata): {src} → {dst}")
+    
+    # 3) upload style su MinIO
+    if os.path.isdir(style_dir) and os.listdir(style_dir):
+        sync_minio(
+            "upload",
+            style_dir,
+            new_path_output_minio_path,
+            access_key, secret_key, endpoint_url,
+        )
+
+
+    if complementary_names and new_path_output_minio_path:
+
+        sync_minio(
+            "upload",
+            os.path.join(output_local_path, "complementary_poi"),
+            new_path_output_minio_path,
+            access_key, secret_key, endpoint_url,
+        )
+            
     print_end("EXECUTION", t0_computo)
+
+    shutil.rmtree(stage_dir, ignore_errors=True)
 
     script_end_time = datetime.now()
     dt = (script_end_time - script_start_time).total_seconds()
@@ -322,7 +467,6 @@ if __name__ == '__main__':
         parameters_file = sys.argv[1]
 
         
-        # Ora tutto il resto dello script
         logger.info("=============================================================================================")
         logger.info(f"[{ts()}] SCRIPT STARTS\n")
         
