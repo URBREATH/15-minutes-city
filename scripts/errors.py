@@ -11,34 +11,49 @@ def ts():
 
 
 ERRORS = {
-
-    # --------------------------------
+    # --- Generic / Execution ---
     "ERR_001": "parameters.ini not found or invalid",
     "ERR_002": "Missing required parameter",
     "ERR_003": "output_local_path invalid",
     "ERR_004": "Missing required MinIO configuration: MINIO_ACCESS_KEY | MINIO_SECRET_KEY | MINIO_ENDPOINT_URL",
     "ERR_005": "Invalid parameter value weight",
     "ERR_006": "Invalid parameter value mode",
-    "ERR_007": "Invalid parameter value poi_category_osm",
-    "ERR_008": "Invalid parameter value poi_category_custom_name",
-    "ERR_009": "Invalid parameter value poi_category_custom",
-    "ERR_010": "Style requires at least one csv",
-    "ERR_011": "More styles than csv categories",
-    "ERR_012": "poi_category_custom_style not found",    
-    "ERR_013": "Invalid parameter value park_gates_source",
-    "ERR_014": "park_gates_csv missing or invalid",
-    "ERR_015": "poi_category_custom_csv not found",
-    "ERR_016": "clip_layer not found",
-    "ERR_017": "grid_gpkg not found"  ,
-    "ERR_018": "Invalid parameter value output_format",
-    "ERR_019": "Invalid parameter value output_EPSG",
-    "ERR_020": "Invalid parameter value poi_osm_path" ,
-    "ERR_021": "Invalid parameter value network_nodes" ,
-    "ERR_022": "Invalid parameter value network_edges" ,
-    "ERR_023": "network_nodes and network_edges must be specified together",
-    "ERR_024": "GeoJSON output must use EPSG:4326"
-}
+    "ERR_007": "Invalid parameter value output_format",
+    "ERR_008": "Invalid parameter value output_EPSG",
+    "ERR_009": "GeoJSON output must use EPSG:4326",
 
+    # --- Network ---
+    "ERR_010": "Invalid parameter value network_nodes",
+    "ERR_011": "Invalid parameter value network_edges",
+    "ERR_012": "network_nodes and network_edges must be specified together",
+
+    # --- POI OSM ---
+    "ERR_013": "Invalid parameter value poi_category_osm",
+    "ERR_014": "Invalid parameter value poi_osm_path",
+
+    # --- POI custom ---
+    "ERR_015": "custom category cannot match OSM category",
+    "ERR_016": "custom categories count must match CSV categories count",
+    "ERR_017": "poi_category_custom_csv not found",
+    "ERR_018": "poi_category_custom_style requires at least one csv",
+    "ERR_019": "poi_category_custom_style: more styles than csv categories",
+    "ERR_020": "poi_category_custom_style not found",
+
+    # --- POI complementary ---
+    "ERR_021": "complementary categories count must match CSV categories count",
+    "ERR_022": "poi_category_complementary_csv not found",
+    "ERR_023": "poi_category_complementary_style requires at least one csv",
+    "ERR_024": "poi_category_complementary_style: more styles than csv categories",
+    "ERR_025": "poi_category_complementary_style not found",
+
+    # --- Park ---
+    "ERR_026": "Invalid parameter value park_gates_source",
+    "ERR_027": "park_gates_csv missing or invalid",
+
+    # --- Grid ---
+    "ERR_028": "clip_layer not found",
+    "ERR_029": "grid_gpkg not found",
+}
 
 # -----------------------------------------------------------------------------
 # MAIN ERROR FUNCTION
