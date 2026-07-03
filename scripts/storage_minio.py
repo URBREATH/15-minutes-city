@@ -1,18 +1,21 @@
 # storage_minio.py
 import os
-import glob
-import tempfile
 from io import BytesIO
+
 import boto3
 import pandas as pd
 from botocore.exceptions import ClientError
+
 from scripts.errors import raise_error
+from scripts.logger import logger
+#Boto3 è il client AWS S3 
+KNOWN_MINIO_BUCKETS = {"urbreath-public-repo"}
 
-# ------------------------------------------------------------------
-# CONFIG
-# ------------------------------------------------------------------
 
-def get_s3_client(access_key, secret_key, endpoint_url):
+# Crea il client S3 che serve alle varie funzioni
+
+# ---------- interni ----------
+def _get_s3(access_key, secret_key, endpoint_url):
     return boto3.client(
         "s3",
         aws_access_key_id=access_key,
@@ -22,297 +25,149 @@ def get_s3_client(access_key, secret_key, endpoint_url):
     )
 
 
-def minio_file_exists(
-    bucket,
-    object_key,
-    endpoint_url,
-    access_key,
-    secret_key
-):
-    try:
-        s3 = get_s3_client(access_key, secret_key, endpoint_url)
-
-        s3.head_object(Bucket=bucket, Key=object_key)
-        return True
-
-    except ClientError:
-        return False
-    except Exception:
-        return False
-        
-def minio_copy_prefix(
-    bucket,
-    source_prefix,
-    dest_prefix,
-    endpoint_url,
-    access_key,
-    secret_key
-):
-    s3 = get_s3_client(access_key, secret_key, endpoint_url)
-    
-    resp = s3.list_objects_v2(
-        Bucket=bucket,
-        Prefix=source_prefix
-    )
-
+# Generatorw che elenca tutt i file remoti sotto un prefisso. suffix opzionale per filtrare (es. solo .tif).
+def _list_keys(s3, bucket, prefix, suffix=None):
+    resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
     for obj in resp.get("Contents", []):
-        source_key = obj["Key"]
-        relative_key = source_key[len(source_prefix):].lstrip("/")
-        dest_key = f"{dest_prefix}/{relative_key}"
-
-        s3.copy_object(
-            Bucket=bucket,
-            CopySource={"Bucket": bucket, "Key": source_key},
-            Key=dest_key
-        )
+        key = obj["Key"]
+        if suffix is None or key.endswith(suffix):
+            yield key
 
 
-def minio_list_poi_categories(
-    bucket,
-    prefix,
-    endpoint_url,
-    access_key,
-    secret_key
-):
+# ---------- API pubblica ----------
+#Esposizione client all'esterno
+def get_s3_client(access_key, secret_key, endpoint_url):
+    return _get_s3(access_key, secret_key, endpoint_url)
 
-    try:
-        s3 = get_s3_client(access_key, secret_key, endpoint_url)
-
-        resp = s3.list_objects_v2(
-            Bucket=bucket,
-            Prefix=prefix
-        )
-
-        categories = set()
-        for obj in resp.get("Contents", []):
-            key = obj["Key"]
-            if key.endswith(".csv"):
-                category = key.split("/")[-1].replace(".csv", "")
-                categories.add(category)
-
-        return categories
-
-    except Exception as e:
-        return set()
-
-KNOWN_MINIO_BUCKETS = {"urbreath-public-repo"}
-
-def is_minio_path(path: str):
+#Divide "urbreath-public-repo/Parma/file.tif" in ("urbreath-public-repo", "Parma/file.tif") → bucket + key.
+def is_minio_path(path):
     if not path or "/" not in path:
         return False
-    first = path.split("/", 1)[0]
-    return first in KNOWN_MINIO_BUCKETS
-    
+    return path.split("/", 1)[0] in KNOWN_MINIO_BUCKETS
 
-def split_bucket_and_prefix(path: str):
-    """
-    Split a MinIO path of the form:
-    bucket/prefix/...
-
-    Returns:
-        bucket (str)
-        prefix (str)
-    """
-    if not path or "/" not in path:
-        raise ValueError(f"Invalid MinIO path: {path}")
-
-    parts = path.split("/", 1)
-    bucket = parts[0]
-    prefix = parts[1] if len(parts) > 1 else ""
-
-    return bucket, prefix
-
-def load_pois_from_minio(
-    output_path_bbox,
-    access_key,
-    secret_key,
-    endpoint_url
-):
-    bucket, prefix = split_bucket_and_prefix(output_path_bbox)
-
-    s3 = get_s3_client(access_key, secret_key, endpoint_url)
-
-    poi_prefixes = [
-        f"{prefix}/osm_poi/",
-        f"{prefix}/custom_poi/"
-    ]
-
-    pois = []
-    categories = []
-
-    for p in poi_prefixes:
-        resp = s3.list_objects_v2(Bucket=bucket, Prefix=p)
-        for obj in resp.get("Contents", []):
-            key = obj["Key"]
-            if key.endswith(".csv"):
-                name = os.path.splitext(os.path.basename(key))[0]
-                df = pd.read_csv(BytesIO(
-                    s3.get_object(Bucket=bucket, Key=key)["Body"].read()
-                ))
-                pois.append(df)
-                categories.append(name)
-
-    return pois, categories
 
 def split_path(path):
     parts = path.split("/", 1)
-    bucket_name = parts[0]
-    object_key = parts[1] if len(parts) > 1 else ""
-    return bucket_name, object_key
+    return parts[0], (parts[1] if len(parts) > 1 else "")
+
+
+# ---------- existence ----------
+# head_object è il modo standard per testare l'esistenza di un file su S3.
+def minio_file_exists(bucket, object_key, endpoint_url, access_key, secret_key):
+    try:
+        s3 = _get_s3(access_key, secret_key, endpoint_url)
+        s3.head_object(Bucket=bucket, Key=object_key)
+        return True
+    except Exception:
+        return False
+
 
 def check_path_exists(path, err_code, endpoint_url, access_key, secret_key):
     if is_minio_path(path):
         bucket, key = split_path(path)
-
-        if not key:
+        if not key or not minio_file_exists(bucket, key, endpoint_url, access_key, secret_key):
             raise_error(err_code, extra=path)
-        
-
-        if not minio_file_exists(
-            bucket,
-            key,
-            endpoint_url,
-            access_key,
-            secret_key
-        ):
-            raise_error(err_code, extra=path)
-    else:
-        if not os.path.exists(path):
-            raise_error(err_code, extra=path)
-            
-def get_folder(local_path, output_minio_path, access_key, secret_key, endpoint_url):
-
-    if os.path.isfile(local_path):
-        # solo file singolo
-        filename = os.path.basename(local_path)
-        filepath = f"{output_minio_path}/{filename}"
-        upload_on_minio(local_path, filepath, access_key, secret_key, endpoint_url)
-    else:
-        # cartella: upload ricorsivo
-        for root, dirs, files in os.walk(local_path):
-            for file in files:
-                local_file = os.path.join(root, file)
-
-                rel_path = os.path.relpath(local_file, os.path.dirname(local_path))
-
-                filepath = f"{output_minio_path}/{rel_path}"
-
-                upload_on_minio(local_file, filepath, access_key, secret_key, endpoint_url)
-
-            
-            
+    elif not os.path.exists(path):
+        raise_error(err_code, extra=path)
 
 
-    
-def check_folder_exists(
-    path,
-    err_code,
-    endpoint_url,
-    access_key,
-    secret_key
-):
-
+def check_folder_exists(path, err_code, endpoint_url, access_key, secret_key):
     bucket, prefix = split_path(path)
-
-    
     if not prefix:
         raise_error(err_code, extra=path)
-    
     try:
-        s3 = get_s3_client(access_key, secret_key, endpoint_url)
-    
-        # normalizza il prefix come cartella
-        prefix = prefix.rstrip("/") + "/"
-    
-        resp = s3.list_objects_v2(
-            Bucket=bucket,
-            Prefix=prefix,
-            MaxKeys=1
-        )
-
-        # se non c'è nemmeno un oggetto → cartella inesistente
+        s3 = _get_s3(access_key, secret_key, endpoint_url)
+        prefix_norm = prefix.rstrip("/") + "/"
+        resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix_norm, MaxKeys=1)
         if "Contents" not in resp:
             raise_error(err_code, extra=path)
-    
     except Exception:
         raise_error(err_code, extra=path)
 
 
-def upload_on_minio(
-    local_file,
-    minio_path,
-    access_key,
-    secret_key,
-    endpoint_url
-):
-
-    bucket_name, object_key = split_path(
-        minio_path
-    )
-
-    s3 = get_s3_client(
-        access_key,
-        secret_key,
-        endpoint_url
-    )
+# ---------- low-level I/O (interni a sync_minio) ----------
+def _upload_file(local_file, minio_path, access_key, secret_key, endpoint_url):
+    bucket, key = split_path(minio_path)
+    s3 = _get_s3(access_key, secret_key, endpoint_url)
+    s3.upload_file(local_file, bucket, key)
 
 
+def _upload_folder(local_folder, minio_path, access_key, secret_key, endpoint_url):
+    base = os.path.dirname(local_folder)
+    for root, _, files in os.walk(local_folder):
+        for f in files:
+            local_file = os.path.join(root, f)
+            rel = os.path.relpath(local_file, base)
+            _upload_file(local_file, f"{minio_path}/{rel}",
+                         access_key, secret_key, endpoint_url)
 
-    s3.upload_file(
-        local_file,
-        bucket_name,
-        object_key
-    )
+
+def _download_file(minio_path, local_dest, access_key, secret_key, endpoint_url):
+    bucket, key = split_path(minio_path)
+    s3 = _get_s3(access_key, secret_key, endpoint_url)
+    os.makedirs(os.path.dirname(local_dest) or ".", exist_ok=True)
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    with open(local_dest, "wb") as f:
+        f.write(obj["Body"].read())
+
+
+def _download_folder(minio_path, local_dest, access_key, secret_key, endpoint_url):
+    bucket, prefix = split_path(minio_path)
+    prefix_n = prefix.rstrip("/") + "/"
+    os.makedirs(local_dest, exist_ok=True)
+    s3 = _get_s3(access_key, secret_key, endpoint_url)
+    for key in _list_keys(s3, bucket, prefix_n):
+        rel = key[len(prefix_n):]
+        if not rel:
+            continue
+        dest = os.path.join(local_dest, rel)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        obj = s3.get_object(Bucket=bucket, Key=key)
+        with open(dest, "wb") as f:
+            f.write(obj["Body"].read())
+
+
+# ---------- UNICA API che usano i chiamanti ----------
+def sync_minio(direction, local_path, minio_path,
+               access_key, secret_key, endpoint_url):
+    """
+    direction = "upload" (locale -> MinIO) | "download" (MinIO -> locale)
+    Funziona sia per file singoli che per cartelle.
+    No-op se mancano credenziali o minio_path non valido.
+    """
+    if not (access_key and secret_key and endpoint_url):
+        return
+    if not minio_path or not is_minio_path(minio_path):
+        return
+#Decide automaticamente se è file o cartella e chiama l'helper giusto
+    if direction == "upload":
+        if not os.path.exists(local_path):
+            logger.warning(f"sync_minio upload: missing {local_path}")
+            return
+        if os.path.isfile(local_path):
+            _upload_file(local_path, minio_path,
+                         access_key, secret_key, endpoint_url)
+        else:
+            _upload_folder(local_path, minio_path,
+                           access_key, secret_key, endpoint_url)
+        return
+
+    if direction == "download":
+        bucket, key = split_path(minio_path)
+        s3 = _get_s3(access_key, secret_key, endpoint_url)
+        try:
+            s3.head_object(Bucket=bucket, Key=key)
+            is_file = True
+        except Exception:
+            is_file = False
+
+        if is_file:
+            _download_file(minio_path, local_path,
+                           access_key, secret_key, endpoint_url)
+        else:
+            _download_folder(minio_path, local_path,
+                             access_key, secret_key, endpoint_url)
+        return
+
+    raise ValueError(f"sync_minio: invalid direction {direction!r}")
     
-    
-def minio_copy_file(
-    bucket,
-    source_key,
-    dest_key,
-    endpoint_url,
-    access_key,
-    secret_key
-):
-
-    s3 = get_s3_client(
-        access_key,
-        secret_key,
-        endpoint_url
-    )
-
-
-    s3.copy_object(
-        Bucket=bucket,
-        CopySource={
-            "Bucket": bucket,
-            "Key": source_key
-        },
-        Key=dest_key
-    )
-    
-def copy_from_minio(
-    source_minio_path,
-    local_destination,
-    access_key,
-    secret_key,
-    endpoint_url
-):
-
-    bucket, key = split_path(source_minio_path)
-
-    s3 = get_s3_client(
-        access_key,
-        secret_key,
-        endpoint_url
-    )
-
-    os.makedirs(
-        os.path.dirname(local_destination),
-        exist_ok=True
-    )
-
-    s3.download_file(
-        bucket,
-        key,
-        local_destination
-    )
