@@ -50,8 +50,8 @@ from scripts.logger import logger
 
 import osmnx as ox
 
-
-from scripts.storage_minio import copy_from_minio,minio_copy_file,upload_on_minio,get_folder,split_path,get_s3_client,minio_file_exists,minio_copy_prefix,minio_list_poi_categories,is_minio_path,split_bucket_and_prefix,load_pois_from_minio
+from scripts.storage_minio import is_minio_path, split_path
+#rom scripts.storage_minio import list_minio_categories_wrapper,read_csv_any,upload_if_needed,copy_from_minio,minio_copy_file,upload_on_minio,get_folder,split_path,get_s3_client,minio_file_exists,minio_copy_prefix,minio_list_poi_categories,is_minio_path,split_bucket_and_prefix,load_pois_from_minio
 warnings.filterwarnings("ignore")
 
 
@@ -113,7 +113,7 @@ def decay(time):
     elif(time >= 0 and time <=15): return 1
     else: return 0
 
-
+# User Agent per il blocco delle chiamate overpass
 def overpass_query(bbox,query):
 
     
@@ -163,741 +163,271 @@ def overpass_node_query(south, west, north, east, tag_query):
 
     return pd.DataFrame(nodes)
 
-def read_csv_any(path,
-            access_key,
-            secret_key,
-            endpoint_url):
 
-    if is_minio_path(path):
-
-        tmp_file = tempfile.mktemp(suffix=".csv")
-
-        copy_from_minio(
-            path,
-            tmp_file,
-            access_key,
-            secret_key,
-            endpoint_url
-        )
-
-        return pd.read_csv(tmp_file)
-
-    return pd.read_csv(path)
 
 
 # -----------------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------------
 # BBOX
 
-def create_bbox(bbox, output_path, output_minio_path,hex_diameter_m, access_key, secret_key, endpoint_url):
-              
-    if access_key and secret_key and endpoint_url and is_minio_path(output_path):
-        
-        bucket_name, filepath_minio = split_path(output_minio_path)
-        bucket_name, filepath = split_path(output_path)
-        minio_copy_prefix(
-                        bucket=bucket_name,
-                        source_prefix=f"{filepath}/grid/",
-                        dest_prefix=f"{filepath_minio}/grid",
-                        endpoint_url=endpoint_url,
-                        access_key=access_key,
-                        secret_key=secret_key
-            )
-        return 0
-              
+def create_bbox(bbox, output_path, hex_diameter_m):
     grid_folder = os.path.join(output_path, "grid")
-    csv_path = f"{grid_folder}/grid_parameter.csv"
+    csv_path = os.path.join(grid_folder, "grid_parameter.csv")
+
     if os.path.exists(grid_folder):
-        
-        if os.path.exists(grid_folder):
-            logger.info(f"The folder {grid_folder} already exists.\n", )
-            if access_key and secret_key and endpoint_url: 
-                minio_path = os.path.join(output_minio_path, "grid") 
-                get_folder(csv_path, minio_path,access_key, secret_key, endpoint_url)
-            return 0
-        
-    else:
-        
-        latoXCella = 3/2 * hex_diameter_m
-        latoYCella = np.sqrt(3)/2 * hex_diameter_m
-        
-        latitude = latitudine_gradi(bbox, latoYCella)
-        longitude = longitudine_gradi(bbox, latoXCella)
-        
-        riga_bbox = [
-            "[" + ",".join([str(el) for el in bbox]) + "]",  # bbox original
-            "[" + ",".join([str(el) for el in bbox]) + "]",  # bbox FOR DOWNLOAD
-            latitude,
-            longitude,
-            hex_diameter_m / 2
-        ]
-        
-        os.makedirs(grid_folder)
-            
-        np.savetxt(csv_path, [riga_bbox], delimiter=';', fmt='%s',
-                header='inputBBox;downloadBBox;latitude;longitude;hex_radius_m', comments='')
-        
-        if access_key and secret_key and endpoint_url:         
-            get_folder(grid_folder, output_minio_path,access_key, secret_key, endpoint_url)
-        
-    return 0
+        logger.info(f"The folder {grid_folder} already exists.\n")
+        return grid_folder   
+    latoXCella = 3 / 2 * hex_diameter_m
+    latoYCella = np.sqrt(3) / 2 * hex_diameter_m
+    latitude = latitudine_gradi(bbox, latoYCella)
+    longitude = longitudine_gradi(bbox, latoXCella)
+
+    riga_bbox = [
+        "[" + ",".join(str(el) for el in bbox) + "]",
+        "[" + ",".join(str(el) for el in bbox) + "]",
+        latitude, longitude, hex_diameter_m / 2,
+    ]
+
+    os.makedirs(grid_folder)
+    np.savetxt(
+        csv_path, [riga_bbox], delimiter=';', fmt='%s',
+        header='inputBBox;downloadBBox;latitude;longitude;hex_radius_m',
+        comments='',
+    )
+    return grid_folder
+
 
 
 # -----------------------------------------------------------------------------------------------------------------------------------
 
 # DOWNLOAD
 
-def download(aoi_bbox, output_path_bbox,    
+def download(
+    aoi_bbox,
+    output_path_bbox,
     poi_category_custom_name,
-    poi_category_custom_csv,
-    poi_category_osm ,
-    access_key, 
-    secret_key, 
-    endpoint_url,
-    output_minio_path,
-    network_edges,
-    network_nodes,
-    poi_osm_path,
-    mode = 'walk',
+    poi_category_custom_csv,    
+    poi_category_osm,
+    poi_category_complementary_name,
+    poi_category_complementary_csv,    
+    network_edges,              # path locale o None
+    network_nodes,              # path locale o None
+    poi_osm_path,               # path locale o None
+    mode='walk',
     weight='time',
     park_gates_source='osm',
     park_gates_osm_buffer_m=10,
-    park_gates_csv=None,
-    park_gates_virtual_distance_m=100
+    park_gates_csv=None,        # path locale o None
+    park_gates_virtual_distance_m=100,
 ):
-   
     aoi_bbox = json.loads(aoi_bbox)
-        
-    #Download network 
-    download_network_osm(aoi_bbox, output_path_bbox, access_key, secret_key, endpoint_url, output_minio_path, network_edges, network_nodes,mode, weight)
-    
-    # Dowload POIs
-    download_poi_osm(aoi_bbox, output_path_bbox, poi_category_osm, poi_osm_path,poi_category_custom_name, poi_category_custom_csv, access_key, secret_key, endpoint_url,output_minio_path,park_gates_source, park_gates_osm_buffer_m
-    ,park_gates_csv, park_gates_virtual_distance_m)
-           
+
+    download_network_osm(
+        aoi_bbox, output_path_bbox,
+        network_edges, network_nodes, mode, weight,
+    )
+    download_poi_osm(
+        aoi_bbox, output_path_bbox,
+        poi_category_osm, poi_osm_path,
+        poi_category_custom_name, poi_category_custom_csv,poi_category_complementary_name,
+        poi_category_complementary_csv, 
+        park_gates_source, park_gates_osm_buffer_m,
+        park_gates_csv, park_gates_virtual_distance_m,
+    )
     return 0
 
-def upload_if_needed(
-    local_file,
-    target_relative_path,
-    output_minio_path,
-    access_key,
-    secret_key,
-    endpoint_url
-):
 
-    
-    if not output_minio_path or not is_minio_path(output_minio_path):
-        return
-
-
-    bucket, prefix = split_path(
-        output_minio_path
-    )
-
-    target_path = (
-        f"{bucket}/"
-        f"{prefix}/"
-        f"{target_relative_path}"
-    )
-
-    upload_on_minio(
-        local_file,
-        target_path,
-        access_key,
-        secret_key,
-        endpoint_url
-    )
-
-    logger.info(
-        f"Uploaded -> {target_path}"
-    )
     
 def download_poi_osm(
     aoi_bbox,
     output_path_bbox,
     poi_category_osm,
-    poi_osm_path,
+    poi_osm_path,           
     custom_names,
-    custom_csvs,
-    access_key,
-    secret_key,
-    endpoint_url,
-    output_minio_path,
+    custom_csvs,         
+    complementary_names,
+    complementary_csvs,
     park_gates_source='osm',
     park_gates_osm_buffer_m=10,
-    park_gates_csv=None,
-    park_gates_virtual_distance_m=100
+    park_gates_csv=None,    # path locale o None
+    park_gates_virtual_distance_m=100,
 ):
-
-
-
     logger.info("DOWNLOAD POIs start.")
     logger.info("-" * 120)
 
-    
-    #Controlla se le credenziali MinIO sono presenti.
-    def has_minio():
-        return all([
-            access_key,
-            secret_key,
-            endpoint_url
-        ])
-    # se è 'all' valid_categories sono tutte, altrimenti le splitta
-    
     def parse_categories(poi_category_osm, valid_categories):
-    
-        # ✅ solo custom: None significa "non usare OSM"
         if poi_category_osm is None:
             return set()
-    
         if (not poi_category_osm) or (poi_category_osm.lower().strip() == "all"):
             return set(valid_categories)
-    
-        return {
-            x.strip().lower()
-            for x in poi_category_osm.split(";")
-            if x.strip()
-        }
-    
-    # Legge tutti i .csv in una cartella.
+        return {x.strip().lower() for x in poi_category_osm.split(";") if x.strip()}
+
     def list_local_categories(folder):
-
-        if not os.path.exists(folder):
+        if not folder or not os.path.exists(folder):
             return set()
+        return {os.path.splitext(f)[0] for f in os.listdir(folder) if f.endswith(".csv")}
 
-        return {
-            os.path.splitext(f)[0]
-            for f in os.listdir(folder)
-            if f.endswith(".csv")
-        }
-    
-    #Wrapper per leggere CSV presenti su MinIO.
-    def list_minio_categories_wrapper(minio_path):
+    poi_folder = os.path.join(output_path_bbox, "osm_poi")
+    custom_poi_folder = os.path.join(output_path_bbox, "custom_poi")
+    complementary_poi_folder = os.path.join(output_path_bbox, "complementary_poi")  
+    os.makedirs(poi_folder, exist_ok=True)
+    os.makedirs(custom_poi_folder, exist_ok=True)
+    os.makedirs(complementary_poi_folder, exist_ok=True)  
 
-        bucket, prefix = split_path(minio_path)
-
-        return minio_list_poi_categories(
-            bucket=bucket,
-            prefix=prefix,
-            endpoint_url=endpoint_url,
-            access_key=access_key,
-            secret_key=secret_key
-        )
-
-
-    # ==================================================
-    # LOCAL FOLDERS
-    # ==================================================
-
-    poi_folder = os.path.join(
-        output_path_bbox,
-        "osm_poi"
-    )
-
-    custom_poi_folder = os.path.join(
-        output_path_bbox,
-        "custom_poi"
-    )
-
-    os.makedirs(
-        poi_folder,
-        exist_ok=True
-    )
-
-    os.makedirs(
-        custom_poi_folder,
-        exist_ok=True
-    )
-
-    # ==================================================
-    # LOAD OSM TAG CONFIG
-    # ==================================================
-
-    with open(
-        "./config/poi_category_osm_tag.json",
-        "r",
-        encoding="utf-8"
-    ) as f:
-
+    with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
+    valid_categories = set(osm_tags.keys())
 
-    valid_categories = set(
-        osm_tags.keys()
-    )
-
-    # ==================================================
-    # REQUESTED CATEGORIES
-    # ==================================================
-
-    requested_categories = parse_categories(
-        poi_category_osm,
-        valid_categories
-    )
-
-    logger.info(
-        f"Requested categories: "
-        f"{requested_categories}"
-    )
-
-    # ==================================================
-    # AVAILABLE CATEGORIES
-    # ==================================================
+    requested_categories = parse_categories(poi_category_osm, valid_categories)
+    logger.info(f"Requested categories: {requested_categories}")
 
     available_categories = set()
-
     if poi_osm_path:
-        
-        logger.info(
-            f"poi_osm_path: "
-            f"{poi_osm_path}"
-        )
-
-        if is_minio_path(poi_osm_path):
-
-            available_categories = (
-                list_minio_categories_wrapper(
-                    poi_osm_path
-                )
-            )
-
-        else:
-
-            available_categories = (
-                list_local_categories(
-                    poi_osm_path
-                )
-            )
+        logger.info(f"poi_osm_path: {poi_osm_path}")
+        available_categories = list_local_categories(poi_osm_path)
 
     available_categories = {
-        c.lower().strip()
-        for c in available_categories
+        c.lower().strip() for c in available_categories
         if c.lower().strip() in valid_categories
     }
+    logger.info(f"Available categories: {available_categories}")
 
-    logger.info(
-        f"Available categories: "
-        f"{available_categories}"
-    )
+    already_available  = requested_categories & available_categories
+    missing_categories = requested_categories - available_categories
+    logger.info(f"Already available: {already_available}")
+    logger.info(f"Missing categories: {missing_categories}")
 
-    # ==================================================
-    # SPLIT AVAILABLE / MISSING
-    # ==================================================
-
-    already_available = (
-        requested_categories &
-        available_categories
-    )
-
-    missing_categories = (
-        requested_categories -
-        available_categories
-    )
-
-    logger.info(
-        f"Already available: "
-        f"{already_available}"
-    )
-
-    logger.info(
-        f"Missing categories: "
-        f"{missing_categories}"
-    )
-
-    # ==================================================
-    # COPY EXISTING POIs
-    # ==================================================
-
+    # ---------- COPY EXISTING POIs ----------
     for cat in already_available:
+        local_destination = os.path.join(poi_folder, f"{cat}.csv")
+        source_path = os.path.join(poi_osm_path, f"{cat}.csv")
+        shutil.copy2(source_path, local_destination)
+        logger.info(f"Using existing POI: {cat}")
 
-        local_destination = os.path.join(
-            poi_folder,
-            f"{cat}.csv"
-        )
-
-        logger.info(
-            f"Using existing POI: {cat}"
-        )
-
-        # -----------------------------
-        # MINIO SOURCE
-        # -----------------------------
-
-        if is_minio_path(poi_osm_path):
-
-            source_path = (
-            f"{poi_osm_path.rstrip('/')}/"
-            f"{cat}.csv"
-            )
-
-            copy_from_minio(
-            source_path,
-            local_destination,
-            access_key,
-            secret_key,
-            endpoint_url
-            )
-
-        # -----------------------------
-        # LOCAL SOURCE
-        # -----------------------------
-
-        else:
-
-            source_path = os.path.join(
-                poi_osm_path,
-                f"{cat}.csv"
-            )
-
-            shutil.copy2(
-                source_path,
-                local_destination
-            )
-
-        # -----------------------------
-        # OPTIONAL OUTPUT MINIO
-        # -----------------------------
-
-        upload_if_needed(
-            local_destination,
-            f"osm_poi/{cat}.csv",
-            output_minio_path,
-            access_key,
-            secret_key,
-            endpoint_url
-        )
-
-    # ==================================================
-    # DOWNLOAD MISSING POIs
-    # ==================================================
-
+    # ---------- DOWNLOAD MISSING ----------
     for osm_cat in missing_categories:
-
-        logger.info(
-            f"Downloading missing "
-            f"category: {osm_cat}"
-        )
-
-        local_csv_path = os.path.join(
-            poi_folder,
-            f"{osm_cat}.csv"
-        )
-
-        tag_dict = osm_tags[osm_cat]
-
+        logger.info(f"Downloading missing category: {osm_cat}")
+        local_csv_path = os.path.join(poi_folder, f"{osm_cat}.csv")
         dfs = []
-
-        for key, values in tag_dict.items():
-
-            values_regex = "|".join(values)
-
-            tag_query = (
-                f'"{key}"~"{values_regex}"'
-            )
-
-            logger.info(
-                f"Query: {tag_query}"
-            )
-
-            max_retries = 2
-
-            for attempt in range(max_retries):
-
+        for key, values in osm_tags[osm_cat].items():
+            tag_query = f'"{key}"~"{"|".join(values)}"'
+            logger.info(f"Query: {tag_query}")
+            for attempt in range(2):
                 try:
-
                     df = overpass_node_query(
-                        aoi_bbox[0],
-                        aoi_bbox[1],
-                        aoi_bbox[2],
-                        aoi_bbox[3],
-                        tag_query
+                        aoi_bbox[0], aoi_bbox[1], aoi_bbox[2], aoi_bbox[3], tag_query,
                     )
-
-                    if (
-                        df is None or
-                        df.empty
-                    ):
-
-                        df = pd.DataFrame(
-                            columns=[
-                                "id",
-                                "lat",
-                                "lon"
-                            ]
-                        )
-
+                    if df is None or df.empty:
+                        df = pd.DataFrame(columns=["id", "lat", "lon"])
                     dfs.append(df)
-
                     break
-
                 except Exception as e:
-
-                    logger.warning(
-                        f"Retry "
-                        f"{attempt+1} "
-                        f"failed for "
-                        f"{osm_cat}: {e}"
-                    )
-
+                    logger.warning(f"Retry {attempt+1} failed for {osm_cat}: {e}")
                     time.sleep(5)
 
-        # -----------------------------
-        # CONCAT
-        # -----------------------------
-
-        if len(dfs) > 0:
-
-            result = pd.concat(
-                dfs,
-                ignore_index=True
-            )
-
-        else:
-
-            result = pd.DataFrame(
-                columns=[
-                    "id",
-                    "lat",
-                    "lon"
-                ]
-            )
-
-        # -----------------------------
-        # SAVE LOCAL
-        # -----------------------------
-
-        result.to_csv(
-            local_csv_path,
-            index=False
+        result = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame(
+            columns=["id", "lat", "lon"]
         )
+        result.to_csv(local_csv_path, index=False)
+        logger.info(f"Saved {local_csv_path}")
 
-        logger.info(
-            f"Saved "
-            f"{local_csv_path}"
-        )
-
-        # -----------------------------
-        # OPTIONAL UPLOAD
-        # -----------------------------
-
-        upload_if_needed(
-            local_csv_path,
-            f"osm_poi/{osm_cat}.csv",
-            output_minio_path,
-            access_key,
-            secret_key,
-            endpoint_url
-            )
-
-    if 'park' in missing_categories:
+    # ---------- PARK ----------
+    if "park" in missing_categories:
         handle_park_category(
-        poi_folder,
-        aoi_bbox,
-        output_path_bbox,
-        park_gates_source,
-        park_gates_csv,
-        park_gates_osm_buffer_m,
-        park_gates_virtual_distance_m,
-        access_key,
-        secret_key,
-        endpoint_url,
-        output_minio_path
+            poi_folder,
+            aoi_bbox,
+            output_path_bbox,
+            park_gates_source,
+            park_gates_csv,
+            park_gates_osm_buffer_m,
+            park_gates_virtual_distance_m,
         )
-    # ==================================================
-    # CUSTOM POIs
-    # ==================================================
 
+    # ---------- CUSTOM POIs ----------
     if custom_names and custom_csvs:
+        for name, csv_file in zip(custom_names, custom_csvs):
+            logger.info(f"Processing custom POI: {name}")
+            local_csv_path = os.path.join(custom_poi_folder, f"{name}.csv")
+            df = pd.read_csv(csv_file)
+            logger.info(f"Rows: {len(df)}")
+            df.to_csv(local_csv_path, index=False)
+            logger.info(f"Saved custom POI: {local_csv_path}")
 
-        for name, csv_file in zip(
-            custom_names,
-            custom_csvs
-        ):
-
-            logger.info(
-                f"Processing custom POI: "
-                f"{name}"
-            )
-
-            local_csv_path = os.path.join(
-                custom_poi_folder,
-                f"{name}.csv"
-            )
-
-            df = read_csv_any(
-                csv_file,
-            access_key,
-            secret_key,
-            endpoint_url
-            )
-
-            logger.info(
-                f"Rows: {len(df)}"
-            )
-
-            # -----------------------------
-            # SAVE LOCAL
-            # -----------------------------
-
-            df.to_csv(
-                local_csv_path,
-                index=False
-            )
-
-            logger.info(
-                f"Saved custom POI: "
-                f"{local_csv_path}"
-            )
-
-            # -----------------------------
-            # OPTIONAL UPLOAD
-            # -----------------------------
-
-            upload_if_needed(
-                local_csv_path,
-                f"custom_poi/{name}.csv",
-                output_minio_path,
-            access_key,
-            secret_key,
-            endpoint_url
-            )
+    # ---------- COMPLEMENTARY POIs ----------
+    if complementary_names and complementary_csvs:
+        for name, csv_file in zip(complementary_names, complementary_csvs):
+            logger.info(f"Processing complementary POI: {name}")
+            local_csv_path = os.path.join(complementary_poi_folder, f"{name}.csv")
+            df = pd.read_csv(csv_file)
+            logger.info(f"Rows: {len(df)}")
+            df.to_csv(local_csv_path, index=False)
+            logger.info(f"Saved complementary POI: {local_csv_path}")
 
     logger.info("-" * 120)
     logger.info("DOWNLOAD POIs end.")
-
     return 0
-
 
 def handle_park_category(
     poi_folder,
     bbox_tassello,
     output_path_bbox,
     park_gates_source,
-    park_gates_csv,
+    park_gates_csv,         
     park_gates_osm_buffer_m,
     park_gates_virtual_distance_m,
-    access_key,
-    secret_key,
-    endpoint_url,
-    output_minio_path
 ):
-
     park_path = os.path.join(poi_folder, "park.csv")
-
     logger.info("Downloading park from OSM and handling park gates...")
 
     try:
-        # ==================================================
-        # OSM SOURCE
-        # ==================================================
-
         if park_gates_source == 'osm':
-
             with open("./config/park_gate_osm_tag.json", "r", encoding="utf-8") as f:
                 gate_tags = json.load(f)
-
             all_gates = []
-
             for key, values in gate_tags["gate"].items():
                 for value in values:
                     tag_query = f'"{key}"="{value}"'
                     df = safe_osm_query(bbox_tassello, tags=tag_query)
                     all_gates.append(df)
-
             gates = pd.concat(all_gates, ignore_index=True)
 
             logger.info("-" * 120)
             logger.info(f"Found {len(gates)} park gates from OSM")
 
             park = handle_gates(
-                "A",
-                bbox_tassello,
-                output_path_bbox,
-                gates,
-                None,
-                None,
-                park_path,
-                park_gates_osm_buffer_m,
-                None
+                "A", bbox_tassello, output_path_bbox, gates,
+                None, None, park_path, park_gates_osm_buffer_m, None,
             )
-
             logger.info("-" * 120)
 
-        # ==================================================
-        # CSV SOURCE (LOCAL OR MINIO)
-        # ==================================================
         elif park_gates_source == 'csv' and park_gates_csv:
-
-            park = read_csv_any(
-                park_gates_csv,
-            access_key,
-            secret_key,
-            endpoint_url
-            )
-
+            park = pd.read_csv(park_gates_csv)
             logger.info("-" * 120)
             logger.info(f"Loaded {len(park)} park gates from CSV")
-
             park.to_csv(park_path, index=False)
-
             logger.info("-" * 120)
 
-        # ==================================================
-        # ROAD INTERSECT
-        # ==================================================
         elif park_gates_source == 'road_intersect':
-
             park = handle_gates(
-                "road_intersect",
-                bbox_tassello,
-                output_path_bbox,
-                None,
-                None,
-                None,
-                park_path,
-                None,
-                None
+                "road_intersect", bbox_tassello, output_path_bbox,
+                None, None, None, park_path, None, None,
             )
 
-        # ==================================================
-        # VIRTUAL
-        # ==================================================
         elif park_gates_source == 'virtual':
-
             park = handle_gates(
-                "virtual",
-                bbox_tassello,
-                output_path_bbox,
-                None,
-                None,
-                None,
-                park_path,
-                None,
-                park_gates_virtual_distance_m
+                "virtual", bbox_tassello, output_path_bbox,
+                None, None, None, park_path, None, park_gates_virtual_distance_m,
             )
 
         park.to_csv(park_path, index=False)
-        upload_if_needed(
-        park_path,
-        f"osm_poi/park.csv",
-        output_minio_path,
-        access_key,
-        secret_key,
-        endpoint_url
-        )
+
     except RuntimeError as e:
         logger.info(e)
-        np.savetxt(
-            park_path,
-            ['id,lat,lon,amenity'],
-            delimiter=';',
-            fmt='%s'
-        )
+        np.savetxt(park_path, ['id,lat,lon,amenity'], delimiter=';', fmt='%s')
 
     except (HTTPError, requests.exceptions.RequestException) as e:
         logger.info(e)
-        pass
-    
+        
 def gates_calculation(park_gdf, gates_df, output_path_bbox, park_gates_osm_buffer_m, park_gates_virtual_distance_m, streets=None, gate_source='A'):
     
 
@@ -1193,27 +723,16 @@ def download_streets(bbox):
 
 
 # -----------------------------------------------------------------------------------------------------------------------------------
-
-
 def download_network_osm(
     aoi_bbox,
     output_path_bbox,
-    access_key,
-    secret_key,
-    endpoint_url,
-    output_minio_path,
-    network_edges,
-    network_nodes,
+    network_edges,       
+    network_nodes,        
     mode='walk',
-    weight='time'
+    weight='time',
 ):
-
     logger.info("DOWNLOAD NETWORK start.")
     logger.info("-" * 120)
-
-    # ==================================================
-    # LOCAL PATHS
-    # ==================================================
 
     local_folder = os.path.join(output_path_bbox, "osm_network")
     os.makedirs(local_folder, exist_ok=True)
@@ -1221,167 +740,35 @@ def download_network_osm(
     local_nodes = os.path.join(local_folder, "nodes.csv")
     local_edges = os.path.join(local_folder, "edges.csv")
 
-
+    # -------- REUSE INPUT NETWORK --------
     if network_edges or network_nodes:
-
         logger.info("Network input specified, skipping OSM generation.")
 
-        # -----------------------------
-        # EDGES
-        # -----------------------------
         if network_edges:
-            if is_minio_path(network_edges):
-                
-                copy_from_minio(
-                     network_edges,
-                     local_edges,
-                     access_key,
-                     secret_key,
-                     endpoint_url
-                     )
+            shutil.copy2(network_edges, local_edges)
 
-            else:
-                shutil.copy2(network_edges, local_edges)
-
-        # -----------------------------
-        # NODES
-        # -----------------------------
         if network_nodes:
-            if is_minio_path(network_nodes):
-                
-                copy_from_minio(
-                     network_nodes,
-                     local_nodes,
-                     access_key,
-                     secret_key,
-                     endpoint_url
-                     )
-            else:
-                shutil.copy2(network_nodes, local_nodes)
-
-        # -----------------------------
-        # OPTIONAL UPLOAD
-        # -----------------------------
-        if (
-            output_minio_path and
-            is_minio_path(network_nodes) and is_minio_path(network_edges) and
-            access_key and secret_key and endpoint_url
-        ):
-
-            
-             bucket_src, key_src = split_path(network_edges)
-             bucket_dst, prefix_dst = split_bucket_and_prefix(output_minio_path)
-
-             dest_key = f"{prefix_dst}/osm_network/edges.csv"
-
-             minio_copy_file(
-                 bucket_src,
-                 key_src,
-                 dest_key,
-                 endpoint_url,
-                 access_key,
-                 secret_key
-             )
-             bucket_src, key_src = split_path(network_nodes)
-             bucket_dst, prefix_dst = split_bucket_and_prefix(output_minio_path)
-
-             dest_key = f"{prefix_dst}/osm_network/nodes.csv"
-
-             minio_copy_file(
-                 bucket_src,
-                 key_src,
-                 dest_key,
-                 endpoint_url,
-                 access_key,
-                 secret_key
-             )
-
-
-        if (
-            output_minio_path  and
-            access_key and secret_key and endpoint_url
-        ):
-            
-            upload_on_minio(
-                local_nodes,
-                f"{output_minio_path}/osm_network/nodes.csv",
-                access_key,
-                secret_key,
-                endpoint_url
-            )
-            upload_on_minio(
-                local_edges,
-                f"{output_minio_path}/osm_network/edges.csv",
-                access_key,
-                secret_key,
-                endpoint_url
-            )
+            shutil.copy2(network_nodes, local_nodes)
 
         logger.info("Reused network saved to output.")
         logger.info("DOWNLOAD NETWORK end.")
         return 0
 
-    # ==================================================
-    # GENERATE NETWORK (DEFAULT BEHAVIOUR)
-    # ==================================================
-
+    # -------- GENERATE NETWORK --------
     logger.info("Generating OSM network...")
-
-    _, gdf_nodes, gdf_edges = get_network_osm(
-        aoi_bbox,
-        output_path_bbox
-    )
-
-    # ==================================================
-    # WEIGHT COMPUTATION
-    # ==================================================
+    _, gdf_nodes, gdf_edges = get_network_osm(aoi_bbox, output_path_bbox)
 
     if weight == "time":
-        _, gdf_edges = calculate_edges_time_from_nodes(
-            gdf_edges,
-            mode=mode
-        )
-
-    # ==================================================
-    # SAVE LOCAL
-    # ==================================================
+        _, gdf_edges = calculate_edges_time_from_nodes(gdf_edges, mode=mode)
 
     gdf_nodes["type"] = "osm"
     gdf_nodes.to_csv(local_nodes, index=False)
 
-    cols = ["u", "v", "length", "time"]
     if "time" not in gdf_edges.columns:
         gdf_edges["time"] = np.nan
-
-    gdf_edges[cols].to_csv(local_edges, index=False)
+    gdf_edges[["u", "v", "length", "time"]].to_csv(local_edges, index=False)
 
     logger.info("Network saved locally.")
-
-    # ==================================================
-    # OPTIONAL UPLOAD
-    # ==================================================
-
-    if (
-        output_minio_path  and
-        access_key and secret_key and endpoint_url
-    ):
-        upload_on_minio(
-            local_nodes,
-            f"{output_minio_path}/osm_network/nodes.csv",
-            access_key,
-            secret_key,
-            endpoint_url
-        )
-        upload_on_minio(
-            local_edges,
-            f"{output_minio_path}/osm_network/edges.csv",
-            access_key,
-            secret_key,
-            endpoint_url
-        )
-
-        logger.info("Uploaded network to MinIO.")
-
     logger.info("DOWNLOAD NETWORK end.")
     return 0
 
@@ -1512,122 +899,95 @@ def calculate_edges_time_from_nodes(gdf_edges, mode = 'walk'):
 # -----------------------------------------------------------------------------------------------------------------------------------
 # WALK SCORE FUNCTION
 
-
-def walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpoint_url, output_minio_path, walk_speed_kmh, bike_speed_kmh, mode = 'walk',weight='time'):
-
-        
+def walkScore_min(output_path_bbox, poi_category_osm,
+                  walk_speed_kmh, bike_speed_kmh,
+                  mode='walk', weight='time'):
+    walk_speed_kmh = float(walk_speed_kmh)
+    bike_speed_kmh = float(bike_speed_kmh)
     if weight == 'time':
         peso = TEMPOMAX
     else:
         if mode == 'walk':
-            DISTMAX_FOOT = (walk_speed_kmh / 3.6) * (TEMPOMAX * 60) #meters
-            velocita = (walk_speed_kmh / 3.6)
-            peso = DISTMAX_FOOT
+            velocita = walk_speed_kmh / 3.6
+            peso = velocita * (TEMPOMAX * 60)
         else:
-            DISTMAX_BIKE = (bike_speed_kmh / 3.6) * (TEMPOMAX * 60) #meters            
-            velocita = (bike_speed_kmh / 3.6)
-            peso = DISTMAX_BIKE  
+            velocita = bike_speed_kmh / 3.6
+            peso = velocita * (TEMPOMAX * 60)
 
-    if access_key and secret_key and endpoint_url:
-        
-        bucket_name, filepath_minio = split_path(output_minio_path)
-
-        s3 = get_s3_client(access_key, secret_key, endpoint_url)
-        obj = s3.get_object(
-            Bucket=bucket_name,
-            Key=f"{filepath_minio}/osm_network/nodes.csv"
-        )
-        nodes = pd.read_csv(BytesIO(obj["Body"].read()), index_col=0)
-        obj = s3.get_object(
-            Bucket=bucket_name,
-            Key=f"{filepath_minio}/osm_network/edges.csv"
-        )
-        edges = pd.read_csv(BytesIO(obj["Body"].read()), index_col=[0,1])
-        
-    else:
-        nodes = pd.read_csv("{}/osm_network/nodes.csv".format(output_path_bbox), index_col=0)
-        edges = pd.read_csv("{}/osm_network/edges.csv".format(output_path_bbox), index_col=[0,1])
-    
-   
+    nodes = pd.read_csv(f"{output_path_bbox}/osm_network/nodes.csv", index_col=0)
+    edges = pd.read_csv(f"{output_path_bbox}/osm_network/edges.csv", index_col=[0, 1])
     edges = edges.reset_index()
 
-    
-    if not edges.empty:
 
-        if is_minio_path(output_path_bbox):
-            
-            pois, list_string = load_pois_from_minio(
-                output_path_bbox,
-                access_key,
-                secret_key,
-                endpoint_url
-            )
-
-        else:
-            
-            poi_folder = os.path.join(output_path_bbox, "osm_poi")
-            poi_folder_custom = os.path.join(output_path_bbox, "custom_poi")
-
-            # legge automaticamente tutti i csv presenti
-            poi_folders = [poi_folder, poi_folder_custom]
-            
-            csv_files = []
-            
-            # raccoglie tutti i csv dalle cartelle esistenti
-            for folder in poi_folders:
-                if os.path.isdir(folder):
-                    csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
-            
-            #csv_files = sorted(csv_files)
-            
-            list_string = []
-            pois = []
-            
-            for f in csv_files:
-                name = os.path.splitext(os.path.basename(f))[0]
-                df = pd.read_csv(f)
-                list_string.append(name)
-                pois.append(df)
-        
-        logger.info("POIs categories: %s", list_string)
-
-
-        if weight == 'time':
-        
-            network = pandana.Network(nodes['x'], nodes['y'], edges['u'], edges['v'], edges[['time']], twoway=False)
-        else:
-            network = pandana.Network(nodes['x'], nodes['y'], edges['u'], edges['v'], edges[['length']], twoway=False)
-           
-        walk_score = nodes
-
-        for i in range(0,len(pois)):
-            if not pois[i].empty:
-                network.set_pois(category = list_string[i], maxdist = peso, maxitems = 1, 
-                                x_col = pois[i].lon, y_col = pois[i].lat)
-                res = network.nearest_pois(distance = peso, category = list_string[i], num_pois = 1, 
-                                        include_poi_ids = False)
-                                   
-                if weight == 'time':
-                    walk_score['minutes_{}'.format(list_string[i])] = res[1]
-        
-                    
-                else:
-                    walk_score['minutes_{}'.format(list_string[i])] = res[1] / velocita / 60
-                    res = res[1] / velocita / 60
-                   
-                   
-            else: 
-                walk_score['minutes_{}'.format(list_string[i])] = 60.0
-        walk_score=walk_score.replace({60.0 : None})
-        
-
-         
-        logger.info('Function walkScore_min completed.\n')
-        
-        return 0, walk_score    
-    else:
+    if edges.empty:
         return 0, None
 
+    poi_folder = os.path.join(output_path_bbox, "osm_poi")
+    poi_folder_custom = os.path.join(output_path_bbox, "custom_poi")
+    complementary_poi_folder = os.path.join(output_path_bbox, "complementary_poi")
+    csv_files = []
+    for folder in [poi_folder, poi_folder_custom, complementary_poi_folder]:
+        if os.path.isdir(folder):
+            csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
+
+#---------------------------
+    list_string, pois = [], []
+    for f in csv_files:
+        list_string.append(os.path.splitext(os.path.basename(f))[0])
+        pois.append(pd.read_csv(f))
+
+    logger.info("POIs categories: %s", list_string)
+#----------------------------------------------
+    if weight == 'time':
+        network = pandana.Network(nodes['x'], nodes['y'],
+                                  edges['u'], edges['v'],
+                                  edges[['time']], twoway=False)
+    else:
+        network = pandana.Network(nodes['x'], nodes['y'],
+                                  edges['u'], edges['v'],
+                                  edges[['length']], twoway=False)
+
+    walk_score = nodes
+    for i in range(0, len(pois)):
+        if not pois[i].empty:
+            network.set_pois(category=list_string[i], maxdist=peso, maxitems=1,
+                             x_col=pois[i].lon, y_col=pois[i].lat)
+            res = network.nearest_pois(distance=peso, category=list_string[i],
+                                       num_pois=1, include_poi_ids=False)
+            if weight == 'time':
+                walk_score[f'minutes_{list_string[i]}'] = res[1]
+            else:
+                walk_score[f'minutes_{list_string[i]}'] = res[1] / velocita / 60
+        else:
+            walk_score[f'minutes_{list_string[i]}'] = 60.0
+
+    walk_score = walk_score.replace({60.0: None})
+
+    # -------- SALVATAGGIO MINUTI SUI NODI --------
+    try:
+        nodes_out_dir = os.path.join(output_path_bbox, "osm_network")
+
+        nodes_csv_path = os.path.join(nodes_out_dir, "nodes_minutes.csv")
+        walk_score.to_csv(nodes_csv_path, index=True)
+
+        # GPKG: versione geospaziale (utile per QGIS)
+        nodes_gdf = geopandas.GeoDataFrame(
+            walk_score.copy(),
+            geometry=geopandas.points_from_xy(walk_score['x'], walk_score['y']),
+            crs=EPSG_4326,
+        )
+        nodes_gpkg_path = os.path.join(nodes_out_dir, "nodes_minutes.gpkg")
+        nodes_gdf.to_file(nodes_gpkg_path, layer="nodes_minutes", driver="GPKG")
+
+        logger.info("Saved nodes with minutes: %s / %s",
+                    nodes_csv_path, nodes_gpkg_path)
+    except Exception as e:
+        logger.warning("Could not save nodes_minutes: %s", e)
+    # ---------------------------------------------
+
+    logger.info('Function walkScore_min completed.\n')
+    return 0, walk_score
+    
 
         
 #--------------------------------------------------------------------
@@ -1636,56 +996,25 @@ def walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpo
 #COMPUTO
 
 
-def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custom_names,custom_csvs,grid_gpkg,poi_category_osm, clip_layer, filename,access_key,secret_key,endpoint_url,
- poi_category_custom_style,output_minio_path,virtual_nodes,output_format,output_EPSG, bike_speed_kmh, walk_speed_kmh,mode = 'walk', weight='time'):
-            
+def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
+            custom_names, custom_csvs, grid_gpkg, poi_category_osm, clip_layer,
+            filename, complementary_names, complementary_csvs,poi_category_custom_style,poi_category_complementary_style,
+            output_minio_path,             
+            virtual_nodes, output_format, output_EPSG,
+            bike_speed_kmh, walk_speed_kmh, mode='walk', weight='time'):
+
     bbox = json.loads(aoi_bbox)
     grid_folder = os.path.join(output_path_bbox, "grid")
+    os.makedirs(grid_folder, exist_ok=True)
     grid = None
 
+    # -------- GRID --------
     if grid_gpkg:
-    
         logger.info(f"Loading existing grid: {grid_gpkg}")
-    
-        if is_minio_path(grid_gpkg):
-    
-            b, k = split_path(grid_gpkg)
-    
-            s3 = get_s3_client(access_key, secret_key, endpoint_url)
-    
-            with tempfile.NamedTemporaryFile(suffix=".gpkg") as tmp:
-    
-                s3.download_file(b, k, tmp.name)
-                grid = geopandas.read_file(tmp.name)
-
-    
-        else:
-    
-            grid = geopandas.read_file(grid_gpkg)
-    
-        grid = grid.to_crs(EPSG_4326)
-
-        # Salva sempre la griglia nella cartella grid, sia locale che dopo il download da MinIO
-        
+        grid = geopandas.read_file(grid_gpkg).to_crs(EPSG_4326)
         outputPath_grid = os.path.join(grid_folder, "grid.gpkg")
         grid.to_file(outputPath_grid, layer="grid", driver="GPKG")
-        
-        # Copia opzionale su MinIO dopo il salvataggio locale
-        if access_key and secret_key and endpoint_url:
-            src_bucket, src_prefix = split_path(grid_gpkg)
-            dst_bucket, dst_prefix = split_path(output_minio_path)
-            
-            minio_upload_path = f"{dst_bucket}/{dst_prefix.rstrip('/')}/grid/grid.gpkg"
-
-            upload_on_minio(
-                outputPath_grid,
-                minio_upload_path,
-                access_key,
-                secret_key,
-                endpoint_url
-            )    
     else:
-
         logger.info("Generating grid...")
         lon = []
         lat= []
@@ -1720,9 +1049,11 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custo
         
         keywords = ["athens", "ath", "athen"]
         ath = False
+
         for p in [output_path_bbox, output_minio_path]:
-            if p and any(k in p.lower() for k in keywords):
-                ath =  True
+            if isinstance(p, str) and any(k in p.lower() for k in keywords):
+                ath = True
+
         if ath:
             boundary_shape = shapely.geometry.box(xmin, ymin, xmax, ymax, ccw=True).buffer(200)
             
@@ -1785,21 +1116,14 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custo
         layer="grid",
         driver="GPKG"
         )
-        if access_key and secret_key and endpoint_url:
-            grid_minio_path = f"{output_minio_path.rstrip('/')}/grid/grid.gpkg"
-            upload_on_minio(
-                outputPath_grid,
-                grid_minio_path,
-                access_key,
-                secret_key,
-                endpoint_url
-            )
-   
-            
-            
-    # Chiamata della funzione walkScore_min        
-    result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpoint_url, output_minio_path,walk_speed_kmh, bike_speed_kmh, mode, weight)
-    
+
+    # -------- WALK SCORE --------
+    result, walk_score = walkScore_min(
+        output_path_bbox, poi_category_osm,
+        walk_speed_kmh, bike_speed_kmh, mode, weight,
+    )
+
+    # -------- EMPTY OUTPUT --------
     if walk_score is None or walk_score.empty:
         logger.warning("walkScore_min returned no results. Generating EMPTY output.")
     
@@ -1845,80 +1169,61 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custo
             )
     
         return 0
-
-    else: 
+    else:
+    # -------- POIs (solo locale ora) --------
+        walk_score = geopandas.GeoDataFrame(
+            walk_score, geometry=geopandas.points_from_xy(walk_score.x, walk_score.y),
+        )
+        pois, categories = [], []
+        poi_folder = os.path.join(output_path_bbox, "osm_poi")
+        custom_poi_folder = os.path.join(output_path_bbox, "custom_poi")
+        complementary_poi_folder = os.path.join(output_path_bbox, "complementary_poi")
         
-    
-        walk_score = geopandas.GeoDataFrame(walk_score, geometry = geopandas.points_from_xy(walk_score.x, walk_score.y))
-        pois = []
-        categories = []
+        complementary_categories = set()   # NEW: tiene traccia delle complementary
         
-        if is_minio_path(output_path_bbox):
-            # ------------------------
-            # MINIO
-            # ------------------------
-            pois, categories = load_pois_from_minio(
-                output_path_bbox,
-                access_key,
-                secret_key,
-                endpoint_url
-            )
+        csv_files = []
+        for folder in [poi_folder, custom_poi_folder, complementary_poi_folder]:
+            if os.path.isdir(folder):
+                for f in glob.glob(os.path.join(folder, "*.csv")):
+                    csv_files.append(f)
+                    if folder == complementary_poi_folder:           # NEW
+                        complementary_categories.add(               # NEW
+                            os.path.splitext(os.path.basename(f))[0]
+                        )
         
-        else:
-            # ------------------------
-            # LOCALE
-            # ------------------------
-            poi_folder = os.path.join(output_path_bbox, "osm_poi")
-            custom_poi_folder = os.path.join(output_path_bbox, "custom_poi")
-            folders = [poi_folder, custom_poi_folder]
+        for f in csv_files:
+            categories.append(os.path.splitext(os.path.basename(f))[0])
+            pois.append(pd.read_csv(f))
         
-            csv_files = []
-        
-            for folder in folders:
-                if os.path.isdir(folder):
-                    csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
-        
-            #csv_files = sorted(csv_files)
-        
-            for f in csv_files:
-                name = os.path.splitext(os.path.basename(f))[0]
-                df = pd.read_csv(f)
-        
-                categories.append(name)
-                pois.append(df)
+        # NEW: categorie usate per gli overall (escludono le complementary)
+        main_categories = [c for c in categories if c not in complementary_categories]
         
         logger.info("POIs categories: %s", categories)
-
-
-               
-       # Verify empty hexag
-
+        logger.info("Main categories (for overall): %s", main_categories)
+        logger.info("Complementary categories: %s", complementary_categories)
+    
+        # -------- VIRTUAL NODES --------
         if virtual_nodes:
-
-            hexag = geopandas.sjoin(grid, walk_score, how='left', predicate = 'contains')
-
+            hexag = geopandas.sjoin(grid, walk_score, how='left', predicate='contains')
             hexag['missing_categories'] = hexag.apply(
-            lambda row: [cat for cat in categories if pd.isna(row.get(f'minutes_{cat}'))],
-            axis=1
+                lambda row: [c for c in categories if pd.isna(row.get(f'minutes_{c}'))],
+                axis=1,
             )
-            # Seleziona solo gli esagoni che hanno almeno una categoria mancante
             empty_hexag = hexag[hexag['missing_categories'].apply(len) > 0].copy()
             centroids_empty_hexag = empty_hexag.copy()
             centroids_empty_hexag['geometry'] = centroids_empty_hexag.geometry.centroid
-
-            attach_centroids_to_network(
-                centroids_empty_hexag,
-                output_path_bbox,
-                mode,
-                output_minio_path,
-                access_key,
-                secret_key,
-                endpoint_url
+    
+            attach_centroids_to_network(centroids_empty_hexag, output_path_bbox, mode)
+    
+            result, walk_score = walkScore_min(
+                output_path_bbox, poi_category_osm,
+                walk_speed_kmh, bike_speed_kmh, mode, weight,
             )
-            # AGAIN
-            
-            result, walk_score = walkScore_min(output_path_bbox, poi_category_osm,access_key,secret_key,endpoint_url, output_minio_path,walk_speed_kmh, bike_speed_kmh, mode, weight)
-            walk_score = geopandas.GeoDataFrame(walk_score, geometry = geopandas.points_from_xy(walk_score.x, walk_score.y), crs=EPSG_4326 )  
+            walk_score = geopandas.GeoDataFrame(
+                walk_score,
+                geometry=geopandas.points_from_xy(walk_score.x, walk_score.y),
+                crs=EPSG_4326,
+            )
     
         hexag = geopandas.sjoin(grid, walk_score, how='inner', predicate = 'contains')
      
@@ -1942,64 +1247,61 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custo
                 if pd.notnull(row.get('media', np.nan)):
                     hexag.at[index, f'minutes_{poi_category_osm}'] = row['media']
                     
-        minutes_cols = [f'minutes_{c}' for c in categories]
 
-        hexag['countNaN'] = hexag[minutes_cols].isnull().sum(axis=1)
-    
-        hexag = hexag[['geometry'] + ['minutes_{}'.format(cat) for cat in categories] + ['countNaN']]
+        # Colonne usate per gli overall: SOLO main_categories
+        main_minutes_cols = [f'minutes_{c}' for c in main_categories]
         
-        #Calcolo indice continuo (da 0 a 100)
+        hexag['countNaN'] = hexag[main_minutes_cols].isnull().sum(axis=1)
         
-        if len(categories) > 1:
-            
+        # Manteniamo TUTTE le colonne minutes_* (anche complementary) per visualizzarle
+        hexag = hexag[
+            ['geometry']
+            + [f'minutes_{cat}' for cat in categories]
+            + ['countNaN']
+        ]
+        
+        # Calcolo indice continuo (da 0 a 100) — solo se ci sono almeno 2 main categories
+        if len(main_categories) > 1:
+        
             hexag['overall_average'] = None
-            
-            
+        
             for i in hexag.index:
                 valori = []
                 val100 = []
                 num_valori = 0
-    
-                for j in range(0, len(categories)):
-                    val = hexag.at[i,'minutes_{}'.format(categories[j])]
-                    
+        
+                for cat in main_categories:                          # CHANGED
+                    val = hexag.at[i, f'minutes_{cat}']
+        
                     if np.isnan(val):
                         valori.append(None)
                     else:
-    
                         valori.append(val)
                         num_valori = len(valori)
-                    
+        
                     val100.append(decay(val))
-                pd.set_option('display.max_columns', None)
-                
-                if hexag.at[i, 'countNaN'] == len(categories):  # All values are nan
+        
+                if hexag.at[i, 'countNaN'] == len(main_categories):  # CHANGED
                     hexag.at[i, 'overall_average'] = None
                 else:
-                    
-                    if num_valori > 0:  
-                        
-                        hexag.at[i, 'overall_average'] = sum(filter(None, valori)) / num_valori  # Calculate the overall_average
+                    if num_valori > 0:
+                        hexag.at[i, 'overall_average'] = sum(filter(None, valori)) / num_valori
                     else:
+                        hexag.at[i, 'overall_average'] = None
         
-                        hexag.at[i, 'overall_average'] = None  
-
-
-            def overall_max(row, minutes_cols):
-                values = row[minutes_cols]
-            
-                # Se esiste almeno un NaN → significa "> 60"
+            def overall_max(row, cols):
+                values = row[cols]
                 if values.isnull().any():
                     return '>60'
-            
                 max_val = values.max()
-            
                 if max_val > 60:
                     return '>60'
-            
                 return round(max_val, 2)
         
-            hexag['overall_max'] = hexag.apply(lambda r: overall_max(r, minutes_cols), axis=1)
+            hexag['overall_max'] = hexag.apply(
+                lambda r: overall_max(r, main_minutes_cols),         
+                axis=1,
+            )
         
         pd.set_option('display.max_columns', None)
         pd.set_option("display.max_rows", None)        
@@ -2025,289 +1327,196 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m , output_path_bbox,custo
         inplace=True
         )
         cols_to_keep = ['geometry'] + categories
-        
-        if len(categories) > 1:
-            cols_to_keep += ['overall_average', 'overall_max']
-        
-        # Se clip layer è fornito e valido
 
-        
-        if clip_layer and is_minio_path(clip_layer):
-        
-            try:
-                
-                bucket_name, clip_key = split_path(clip_layer)
-                s3 = get_s3_client(access_key, secret_key, endpoint_url)
-                
-                tmp = tempfile.NamedTemporaryFile(suffix=".gpkg", delete=False)
-                tmp_path = tmp.name
-                tmp.close()   
-                
-                s3.download_fileobj(bucket_name, clip_key, open(tmp_path, "wb"))
-                
-                clip_layer = geopandas.read_file(tmp_path)
-                                
-                clip_layer = clip_layer.to_crs(hexag.crs)
-                
-                hexag_to_save = geopandas.clip(hexag, clip_layer)
-                                
-                os.remove(tmp_path)
+        # -------- CLIP --------
 
+        main_cols = ['geometry'] + [c for c in main_categories if c in hexag.columns]
+        if len(main_categories) > 1:
+            for c in ['overall_average', 'overall_max']:
+                if c in hexag.columns:
+                    main_cols.append(c)
         
-            except Exception as e:
-                logger.warning(f"Clip layer on MinIO not usable: {e}")
-                clip_layer = None      
-                hexag_to_save = hexag.copy()
-
-            
-        elif clip_layer and os.path.isfile(clip_layer) and not is_minio_path(clip_layer):
-            clip_layer = geopandas.read_file(clip_layer)
-            clip_layer = clip_layer.to_crs(EPSG_METRIC)
-            hexag_to_save = geopandas.clip(hexag, clip_layer)
+        complementary_cols = ['geometry'] + [c for c in complementary_categories if c in hexag.columns]
+        
+        # ---------- CLIP (una volta sola, poi si splitta) ----------
+        if clip_layer and os.path.isfile(clip_layer):
+            cl = geopandas.read_file(clip_layer).to_crs(hexag.crs)
+            hexag_clipped = geopandas.clip(hexag, cl)
         else:
-            hexag_to_save = hexag.copy()  # Nessun clipping
+            hexag_clipped = hexag.copy()
         
-        
-        
-        # Mantieni solo le colonne importanti
-        hexag_to_save = hexag_to_save[[c for c in cols_to_keep if c in hexag_to_save.columns]]
-
-        output_dir = f"{output_path_bbox}/output"
-
-        # Crea la cartella se non esiste
+        output_dir = os.path.join(output_path_bbox, "output")
         os.makedirs(output_dir, exist_ok=True)
         
-        hexag_to_save = hexag_to_save.to_crs(f"EPSG:{output_EPSG}")
-
-
-        if output_format == 'gpkg':
-            # Salvataggio GPKG
-            hexag_to_save.to_file(
-                f"{output_dir}/{filename}.gpkg",
-                layer=f"{filename}",
-                driver="GPKG"
-            )
-        elif output_format == "geojson":
-            # shapefile = più file (.shp, .dbf, .shx, .prj...) nella stessa cartella
-            hexag_to_save.to_file(
-                os.path.join(output_dir, f"{filename}.geojson"),
-                driver="GeoJSON"
-            )
-        else:       
-            # Salvataggio CSV
-            hexag_to_save.to_csv(
-                f"{output_dir}/{filename}.csv",
-                sep=';', index=False
-            )
-            
-  
-        if access_key and secret_key and endpoint_url:
+        # Subset per i due output
+        hexag_main = hexag_clipped[[c for c in main_cols if c in hexag_clipped.columns]].copy()
+        hexag_main = hexag_main.to_crs(f"EPSG:{output_EPSG}")
         
-            # 1) Upload output e style
-            get_folder(output_dir, output_minio_path, access_key, secret_key, endpoint_url)
+        has_complementary = bool(complementary_categories) and len(complementary_cols) > 1
+        if has_complementary:
+            hexag_compl = hexag_clipped[[c for c in complementary_cols if c in hexag_clipped.columns]].copy()
+            hexag_compl = hexag_compl.to_crs(f"EPSG:{output_EPSG}")
         
-            style_dir = os.path.join(os.getcwd(), "style")
-            if os.path.isdir(style_dir):
-                get_folder(style_dir, f"{output_minio_path}",
-                           access_key, secret_key, endpoint_url)
+        # ---------- SALVATAGGIO ----------
+        def _save(gdf, name):
+            if output_format == 'gpkg':
+                gdf.to_file(f"{output_dir}/{name}.gpkg", layer=f"{name}", driver="GPKG")
+            elif output_format == "geojson":
+                gdf.to_file(os.path.join(output_dir, f"{name}.geojson"), driver="GeoJSON")
+            else:
+                gdf.to_csv(f"{output_dir}/{name}.csv", sep=';', index=False)
         
-            # 2) Costruzione publish JSON
+        _save(hexag_main, filename)
+        if has_complementary:
+            _save(hexag_compl, f"{filename}_complementary")
+        
+        # ---------- _publish.json (MAIN: osm + custom + overall) ----------
+        if output_minio_path:
             parts = output_minio_path.split("/", 1)[1]
         
-            publish_categories = categories.copy()
-            if len(categories) > 1:
-                publish_categories.extend(["overall_average", "overall_max"])
+            # style_dir esiste già con gli SLD OSM di default
+            style_dir = os.path.join(output_path_bbox, "style")
+            os.makedirs(style_dir, exist_ok=True)
         
-            publish_data = {
-                "analysis": "15 minutes city index",
-                "data": []
-            }
+            publish_main  = {"analysis": "15 minutes city index", "data": []}
+            publish_compl = {"analysis": "15 minutes city index - complementary", "data": []}
         
-            for category in publish_categories:
-                publish_data["data"].append({
-                    "workspace": f"{filename}_{category}",
-                    "store_name": f"{filename}_{category}",
+            # ---- categorie OSM (= main_categories MENO le custom) ----
+            osm_categories = [c for c in main_categories if c not in (custom_names or [])]
+        
+            # ---- voci publish_main per OSM + overall (SLD già in style/) ----
+            publish_categories_main = list(osm_categories)
+            if len(main_categories) > 1:
+                publish_categories_main.extend(["overall_average", "overall_max"])
+        
+            for cat in publish_categories_main:
+                publish_main["data"].append({
+                    "workspace": f"{filename}_{cat}",
+                    "store_name": f"{filename}_{cat}",
                     "data_path": f"{parts}/output/{filename}.{output_format}",
-                    "style_name": f"{category}",
-                    "sld_path": f"{parts}/style/{category}.sld",
+                    "style_name": cat,
+                    "sld_path": f"{parts}/style/{cat}.sld",
                     "write_on_catalogue": True,
-                    "description": "15min analysis"
+                    "description": "15min analysis",
                 })
         
-            if poi_category_custom_style:
-                style_name = os.path.splitext(os.path.basename(poi_category_custom_style))[0]
-                publish_data["data"].append({
-                    "workspace": f"{filename}_{style_name}",
-                    "store_name": f"{filename}_{style_name}",
-                    "data_path": f"{parts}/output/{style_name}.{output_format}",
-                    "style_name": style_name,
-                    "sld_path": poi_category_custom_style,
-                    "write_on_catalogue": True,
-                    "description": "15min analysis"
-                })
+            # ---- funzione che copia SLD e aggiunge voce al publish ----
+            def _publish_styles(names, styles_str, kind, target_publish, data_filename):
+                if not styles_str:
+                    return
         
-            # 3) Scrittura _publish.json SEMPRE in locale
-            if is_minio_path(output_path_bbox):
-                tmpdir = tempfile.TemporaryDirectory()
-                local_publish_path = os.path.join(tmpdir.name, "_publish.json")
-            else:
-                os.makedirs(output_path_bbox, exist_ok=True)
-                local_publish_path = os.path.join(output_path_bbox, "_publish.json")
+                if isinstance(names, str):
+                    names_list = [n.strip() for n in names.split(";") if n.strip()]
+                else:
+                    names_list = [str(n).strip() for n in (names or []) if str(n).strip()]
         
-            with open(local_publish_path, "w", encoding="utf-8") as f:
-                json.dump(publish_data, f, indent=2)
+                styles = [s.strip() for s in styles_str.split(";") if s.strip()]
         
-            
-            minio_publish_path = f"{output_minio_path}/_publish.json"
-            
-            upload_on_minio(
-                local_publish_path,
-                f"{output_minio_path}/_publish.json",
-                access_key,
-                secret_key,
-                endpoint_url
+                for i, sld_path in enumerate(styles):
+                    if not os.path.isfile(sld_path):
+                        logger.warning(f"[{kind}] style not found: {sld_path}")
+                        continue
+        
+                    if i < len(names_list):
+                        cat_name = "".join(names_list[i].lower().split())
+                    else:
+                        cat_name = os.path.splitext(os.path.basename(sld_path))[0]
+        
+                    dest_sld = os.path.join(style_dir, f"{cat_name}.sld")
+                    try:
+                        shutil.copy2(sld_path, dest_sld)
+                        logger.info(f"[{kind}] style copied: {dest_sld}")
+                    except PermissionError:
+                        shutil.copyfile(sld_path, dest_sld)
+                        logger.info(f"[{kind}] style copied (no metadata): {dest_sld}")
+        
+                    ws_prefix = f"{filename}_complementary" if kind == "complementary" else filename
+                    target_publish["data"].append({
+                        "workspace": f"{ws_prefix}_{cat_name}",
+                        "store_name": f"{ws_prefix}_{cat_name}",
+                        "data_path": f"{parts}/output/{data_filename}.{output_format}",
+                        "style_name": cat_name,
+                        "sld_path": f"{parts}/style/{cat_name}.sld",
+                        "write_on_catalogue": True,
+                        "description": f"15min analysis - {kind}",
+                    })
+        
+            # ---- CUSTOM → publish MAIN ----
+            _publish_styles(
+                custom_names,
+                poi_category_custom_style,
+                kind="custom",
+                target_publish=publish_main,
+                data_filename=filename,
             )
-            
-                    
+        
+            # ---- COMPLEMENTARY → publish COMPLEMENTARY ----
+            if has_complementary:
+                _publish_styles(
+                    complementary_names,
+                    poi_category_complementary_style,
+                    kind="complementary",
+                    target_publish=publish_compl,
+                    data_filename=f"{filename}_complementary",
+                )
+        
+            # ---- scrittura JSON in output/ ----
+            os.makedirs(output_dir, exist_ok=True)
+            with open(os.path.join(output_dir, "_publish.json"), "w", encoding="utf-8") as f:
+                json.dump(publish_main, f, indent=2)
+        
+            if has_complementary:
+                with open(os.path.join(f"{output_path_bbox}/complementary_poi", "_publish.json"), "w", encoding="utf-8") as f:
+                    json.dump(publish_compl, f, indent=2)
+        
         return 0
 
-                   
 
+def attach_centroids_to_network(centri, output_path_bbox, mode):
+    coefficiente = COEFFICIENT_WALK if mode == 'walk' else COEFFICIENT_BIKE
 
+    nodes = pd.read_csv(f"{output_path_bbox}/osm_network/nodes.csv", index_col=0)
+    edges = pd.read_csv(f"{output_path_bbox}/osm_network/edges.csv",
+                        index_col=[0, 1]).reset_index()
 
-
-
-def attach_centroids_to_network(centri, output_path_bbox, mode,output_minio_path, access_key,
-                secret_key,
-                endpoint_url):
-    
-    # --- 1. Leggi rete ---
-    if mode == 'walk':
-        coefficiente = COEFFICIENT_WALK
-    else:
-        coefficiente = COEFFICIENT_BIKE
-
-    if access_key and secret_key and endpoint_url:
-        
-        
-        bucket_name, filepath_minio = split_path(output_minio_path)
-
-        s3 = get_s3_client(access_key, secret_key, endpoint_url)
-        obj = s3.get_object(
-            Bucket=bucket_name,
-            Key=f"{filepath_minio}/osm_network/nodes.csv"
-        )
-        nodes = pd.read_csv(BytesIO(obj["Body"].read()), index_col=0)
-        obj = s3.get_object(
-            Bucket=bucket_name,
-            Key=f"{filepath_minio}/osm_network/edges.csv"
-        )
-        #edges = pd.read_csv(BytesIO(obj["Body"].read()), index_col=[0,1])
-        edges = pd.read_csv(BytesIO(obj["Body"].read()))
-
-    else:
-        nodes = pd.read_csv(f"{output_path_bbox}/osm_network/nodes.csv", index_col=0)
-        edges = pd.read_csv(f"{output_path_bbox}/osm_network/edges.csv", index_col=[0,1]).reset_index()
-        
-    
-
-    # converti nodes in GeoDataFrame
     nodes_gdf = geopandas.GeoDataFrame(
         nodes,
         geometry=geopandas.points_from_xy(nodes['x'], nodes['y']),
-        crs=CRS_4326
-    )
-    
-    # trasformazione in metri
-    nodes_gdf = nodes_gdf.to_crs(CRS_3857)
-    
-    # aggiorna x e y
+        crs=CRS_4326,
+    ).to_crs(CRS_3857)
     nodes['x'] = nodes_gdf.geometry.x
     nodes['y'] = nodes_gdf.geometry.y
 
-    
-
-    # (deve essere in metri!)
     centri = centri.to_crs(CRS_3857)
-
-    #np.vstack([...]) → li mette uno sopra l’altro
-    # .T → trasposta    
-    # [[x1, y1],
-    # [x2, y2],
-    # [x3, y3],
-    # ...]
-    
-    # --- 3. KDTree sui nodi ---
-    node_coords = np.vstack([nodes['x'], nodes['y']]).T
-    
-    # organizza questi punti in modo che io possa trovare i vicini velocemente
-    tree = cKDTree(node_coords)
-
-    # --- 4. Coordinate centroidi ---
+    tree = cKDTree(np.vstack([nodes['x'], nodes['y']]).T)
     cent_coords = np.vstack([centri.geometry.x, centri.geometry.y]).T
-
-    # per ogni centroide trova il nodo piu vicino
-    # dist = distanza tra centroide e nodo
-    #idx = posizione del nodo più vicino ( nel dataframe)
-    
     dist, idx = tree.query(cent_coords, k=1)
-    
-    # prende le righe dei nodi trovati
-    #estrae il loro index (node_id reale) 
-
     nearest_nodes = nodes.iloc[idx].index.values
 
-    # --- 6. Crea nuovi nodi: prende i centroidi degli esagoni ---
-    new_nodes = pd.DataFrame({
-        'x': centri.geometry.x,
-        'y': centri.geometry.y
-    })
-    
-    # Trova l’ID più alto tra i nodi esistenti
+    new_nodes = pd.DataFrame({'x': centri.geometry.x, 'y': centri.geometry.y})
     max_node_id = nodes.index.max()
-    # Assegna ID nuovi ai centroidi
     new_nodes.index = range(max_node_id + 1, max_node_id + 1 + len(new_nodes))
     new_nodes['type'] = 'virtual'
-    
-    # --- 7. Crea archi: centroide → nodo OSM più vicino ---
-    new_edges = pd.DataFrame({
-        'u': new_nodes.index,
-        'v': nearest_nodes
-    })
 
-    # --- 8. Calcolo lunghezza e tempo: assegna la distanza ---
+    new_edges = pd.DataFrame({'u': new_nodes.index, 'v': nearest_nodes})
     new_edges['length'] = dist
-    new_edges['slope'] = 0  
-
-    # velocità con modello
+    new_edges['slope'] = 0
     new_edges['velocita'] = coefficiente * np.exp(
         -3.5 * np.abs(new_edges['slope'] + 0.05)
     ) * (1000 / 60)
-    
-    # tempo corretto
     new_edges['time'] = new_edges['length'] / new_edges['velocita']
 
-
-    # --- 9. Rendi bidirezionale ---
-    # prima:  centroide → nodo
-    # dopo:   nodo → centroide
     reverse_edges = new_edges.rename(columns={'u': 'v', 'v': 'u'})
     new_edges = pd.concat([new_edges, reverse_edges], ignore_index=True)
 
-
-
-    # --- 10. Aggiorna rete ---
-    # aggiunge i nuovi nodi  e archi  alla rete
     nodes_updated = pd.concat([nodes, new_nodes])
     edges_updated = pd.concat([edges, new_edges], ignore_index=True)
-    
-    
+
     nodes_gdf_updated = geopandas.GeoDataFrame(
         nodes_updated,
         geometry=geopandas.points_from_xy(nodes_updated['x'], nodes_updated['y']),
-        crs=CRS_3857
+        crs=CRS_3857,
     )
-    
     nodes_4326 = nodes_gdf_updated.to_crs(CRS_4326)
     nodes_4326['x'] = nodes_4326.geometry.x
     nodes_4326['y'] = nodes_4326.geometry.y
@@ -2317,46 +1526,5 @@ def attach_centroids_to_network(centri, output_path_bbox, mode,output_minio_path
     nodes_to_save = nodes_to_save.drop(columns='geometry')
     edges_to_save = edges_updated[['u', 'v', 'length', 'time']]
 
-    if access_key and secret_key and endpoint_url and output_minio_path:
-
-        bucket_name, base_prefix = split_path(output_minio_path)
-    
-        s3 = get_s3_client(access_key, secret_key, endpoint_url)
-    
-        nodes_key = f"{base_prefix}/osm_network/nodes.csv"
-        edges_key = f"{base_prefix}/osm_network/edges.csv"
-    
-        # nodes.csv (con index)
-        buf_nodes = BytesIO()
-        nodes_to_save.to_csv(buf_nodes)  # mantiene index
-        buf_nodes.seek(0)
-        s3.put_object(
-            Bucket=bucket_name,
-            Key=nodes_key,
-            Body=buf_nodes.getvalue(),
-            ContentType="text/csv"
-        )
-    
-        # edges.csv (senza index)
-        buf_edges = BytesIO()
-        edges_to_save.to_csv(buf_edges, index=False)
-        buf_edges.seek(0)
-        s3.put_object(
-            Bucket=bucket_name,
-            Key=edges_key,
-            Body=buf_edges.getvalue(),
-            ContentType="text/csv"
-        )
-    
-    else:
-        nodes_to_save.to_csv(
-            f"{output_path_bbox}/osm_network/nodes.csv"
-        )
-        
-        
-        edges_to_save.to_csv(
-            f"{output_path_bbox}/osm_network/edges.csv",
-            index=False
-        )
-
-
+    nodes_to_save.to_csv(f"{output_path_bbox}/osm_network/nodes.csv")
+    edges_to_save.to_csv(f"{output_path_bbox}/osm_network/edges.csv", index=False)
