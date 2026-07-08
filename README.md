@@ -98,6 +98,9 @@ poi_osm_path = path to the folder containing previously downloaded POI CSV files
 poi_category_custom_name = comma-separated list, names are lowercased and spaces removed
 poi_category_custom_csv = full CSV paths (comma-separated) with required columns: id, lat, lon in EPSG:4326.
 poi_category_custom_style = path to the custom sld for geoserver publication (comma-separated)
+poi_category_complementary_name = comma-separated list, names are lowercased and spaces removed
+poi_category_complementary_csv = full CSV paths (comma-separated) with required columns: id, lat, lon in EPSG:4326.
+poi_category_complementary_style = path to the custom sld for geoserver publication (comma-separated)
 [park]
 park_gates_source = osm | csv | road_intersect | virtual (default = osm)
 park_gates_osm_buffer_m =  OSM park-gate buffer distance in meters (default 10.0)
@@ -119,6 +122,9 @@ The script generates a hexagonal grid and saves it as grid.gpkg in the working d
 Grid parameters, such as area extent and hexagon radius, are stored in grid_parameters.csv.
 
 If virtual_nodes = true, a node is added at each hexagon centroid and connected to the nearest OSM street node, ensuring full network coverage.
+
+If poi_category_complementary_name and its associated fields (poi_category_complementary_csv, poi_category_complementary_style) are set, an additional output named filename_complementary will be produced, containing the results computed only on the specified complementary categories, without the overall results.
+Complementary categories are excluded from the combined computation with the other categories (OSM + custom) and from the overall indexes computation.
 
 
 ## JSON payload
@@ -149,7 +155,11 @@ The API version required a ```parameters.json``` file:
     "poi_category_osm": "all",
     "poi_category_custom_name": null,
     "poi_category_custom_csv": null,
-    "poi_category_custom_style": null
+    "poi_category_custom_style": null,
+    "poi_category_complementary_name": null,
+    "poi_category_complementary_csv": null,
+    "poi_category_complementary_style ": null
+
   },
   "park": {
     "park_gates_source": "osm",
@@ -191,30 +201,43 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 ```
 | Error Code | Error Message |
 |------------|---------------|
+| **Generic / Execution** | |
 | `ERR_001`  | parameters.ini not found or invalid: `<parameters.ini>` |
 | `ERR_002`  | Missing required parameter: `oi_bbox \| filename \| outputPath` |
 | `ERR_003`  | output_local_path invalid |
-| `ERR_004`  | `Missing required MinIO configuration:  MINIO_ACCESS_KEY  \|  MINIO_SECRET_KEY  \| MINIO_ENDPOINT_URL` |
+| `ERR_004`  | Missing required MinIO configuration: `MINIO_ACCESS_KEY \| MINIO_SECRET_KEY \| MINIO_ENDPOINT_URL` |
 | `ERR_005`  | Invalid parameter value weight: `time \| distance` |
 | `ERR_006`  | Invalid parameter value mode: `walk \| bike` |
-| `ERR_007`  | Invalid parameter value poi_category_osm: `park \| restaurantcafe \| …` |
-| `ERR_008`  | Invalid parameter value poi_category_custom_name: `Custom category cannot match OSM category` |
-| `ERR_009`  | Invalid parameter value poi_category_custom: `Custom categories count must match CSV categories count` |
-| `ERR_010`  | Style requires at least one csv |
-| `ERR_011`  | More styles than csv categories |
-| `ERR_012`  | poi_category_custom_style not found |
-| `ERR_013`  | Invalid parameter value park_gates_source: `osm \| csv \| road_network \| virtual` |
-| `ERR_014`  | park_gates_csv missing or invalid |
-| `ERR_015`  | poi_category_custom_csv not found `<poi_category_custom_csv>` |
-| `ERR_016`  | clip_layer not found `<clip_layer>` |
-| `ERR_017`  | grid_gpkg not found `<grid_gpkg>` |
-| `ERR_018`  | Invalid parameter value `output_format` |
-| `ERR_019`  | Invalid parameter value `output_EPSG` | 
-|`ERR_020`  | Invalid parameter value `poi_osm_path` |  
-|`ERR_021`  | Invalid parameter value `network_nodes` |  
-|`ERR_022`  | Invalid parameter value `network_edges` |  
-|`ERR_023`  | `network_nodes` and `network_edges` must be specified together |  
-|`ERR_024`  | GeoJSON output must use EPSG:4326 |  
+| `ERR_007`  | Invalid parameter value `output_format` |
+| `ERR_008`  | Invalid parameter value `output_EPSG` |
+| `ERR_009`  | GeoJSON output must use EPSG:4326 |
+| **Network** | |
+| `ERR_010`  | Invalid parameter value `network_nodes` |
+| `ERR_011`  | Invalid parameter value `network_edges` |
+| `ERR_012`  | `network_nodes` and `network_edges` must be specified together |
+| **POI OSM** | |
+| `ERR_013`  | Invalid parameter value poi_category_osm: `park \| restaurantcafe \| …` |
+| `ERR_014`  | Invalid parameter value `poi_osm_path` |
+| **POI custom** | |
+| `ERR_015`  | Invalid parameter value poi_category_custom_name: `Custom category cannot match OSM category` |
+| `ERR_016`  | Invalid parameter value poi_category_custom: `Custom categories count must match CSV categories count` |
+| `ERR_017`  | poi_category_custom_csv not found `<poi_category_custom_csv>` |
+| `ERR_018`  | poi_category_custom_style requires at least one csv |
+| `ERR_019`  | poi_category_custom_style: more styles than csv categories |
+| `ERR_020`  | poi_category_custom_style not found |
+| **POI complementary** | |
+| `ERR_021`  | Invalid parameter value poi_category_complementary: `Complementary categories count must match CSV categories count` |
+| `ERR_022`  | poi_category_complementary_csv not found `<poi_category_complementary_csv>` |
+| `ERR_023`  | poi_category_complementary_style requires at least one csv |
+| `ERR_024`  | poi_category_complementary_style: more styles than csv categories |
+| `ERR_025`  | poi_category_complementary_style not found |
+| **Park** | |
+| `ERR_026`  | Invalid parameter value park_gates_source: `osm \| csv \| road_network \| virtual` |
+| `ERR_027`  | park_gates_csv missing or invalid |
+| **Grid** | |
+| `ERR_028`  | clip_layer not found `<clip_layer>` |
+| `ERR_029`  | grid_gpkg not found `<grid_gpkg>` |
+
 
 ---
 
@@ -241,12 +264,15 @@ Output directory is created at output_local_path. Inside it:
 
 - **custom_pois**: contains CSV files for custom categories.
 
+- **complementary_pois**: contains CSV files for complementary categories.
+
 - **osm_network**: contains: nodes.csv and edges.csv
 
 ```
 output_local_path/
 ├── output/
-│   ├── <filename>.gpkg
+│   ├── <filename>.{format}
+│   ├── <filename>_complementary.{format}
 ├── _publish.json 
 ├── grid/
 │   ├── grid_parameter.csv
@@ -260,7 +286,9 @@ output_local_path/
 │   ├── park.csv
 │   ├── entertainment.csv
 │   ├── shop.csv
-├── costum_pois/                               
+├── costum_pois/
+├── complementary_pois/
+│   ├── _publish.json                           
 └── osm_network/                                   
     ├── edges.csv
     └── nodes.csv
