@@ -195,14 +195,6 @@ def run_analysis(params: dict):
 
     
     grid_folder = create_bbox(bbox, output_local_path, float(hex_diameter_m))
-    
-    # upload finale
-    sync_minio(
-        "upload",
-        grid_folder,
-        new_path_output_minio_path,
-        access_key, secret_key, endpoint_url,
-    )
 
 
     if output_local_path:
@@ -295,17 +287,8 @@ def run_analysis(params: dict):
         park_gates_csv_local,
         park_gates_virtual_distance_m,
     )
-    
-    # 4. UPLOAD finale di tutto ciò che ha prodotto il download
-    if new_path_output_minio_path:
-        for sub in ["osm_network", "osm_poi", "custom_poi"]:
-            sync_minio(
-                "upload",
-                os.path.join(output_local_path, sub),
-                new_path_output_minio_path,
-                access_key, secret_key, endpoint_url,
-            )
-    
+
+
     print_end("DOWNLOAD", t0_download)
     # ------------------------------------------------
     # EXECUTION
@@ -351,20 +334,6 @@ def run_analysis(params: dict):
         weight
     )
 
-    if new_path_output_minio_path:
-        # 1) output e grid
-        for sub in ["output", "grid"]:
-            local_sub = os.path.join(output_local_path, sub)
-            if os.path.isdir(local_sub):
-                sync_minio(
-                    "upload",
-                    local_sub,
-                    new_path_output_minio_path,
-                    access_key, secret_key, endpoint_url,
-                )
-    
-    # 2) style: integrare SLD OSM di default DENTRO output_local_path/style
-    #    (in cui computo() ha già messo gli SLD custom/complementary)
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     default_style_dir = os.path.join(SCRIPT_DIR, "style")  
     
@@ -372,60 +341,86 @@ def run_analysis(params: dict):
     os.makedirs(style_dir, exist_ok=True)
     
     # Categorie OSM attive in questo run
+    # Categorie OSM attive in questo run
     if poi_category_osm and poi_category_osm.lower() != "all":
         active_osm = [c.strip() for c in poi_category_osm.split(",") if c.strip()]
     else:
         # "all" → copio tutto ciò che trovo in default_style_dir
         active_osm = None
-    
-    if os.path.isdir(default_style_dir):
+
+    # --- NUOVO: se poi_category_osm non è valorizzata, NON copiare SLD OSM di default ---
+    if not (poi_category_osm and poi_category_osm.strip()):
+        logger.info("[style merge] poi_category_osm non valorizzata → skip copia SLD OSM di default")
+    elif os.path.isdir(default_style_dir):
         for fname in os.listdir(default_style_dir):
             src = os.path.join(default_style_dir, fname)
             if not os.path.isfile(src):
                 continue
-    
+
             base, ext = os.path.splitext(fname)
             if ext.lower() != ".sld":
                 continue
-    
+
             # Filtra: porto solo SLD per categorie OSM attive
             # (oltre a overall_average / overall_max che servono sempre)
             if active_osm is not None and base not in active_osm and base not in ("overall_average", "overall_max"):
                 continue
-    
+
             dst = os.path.join(style_dir, fname)
             if os.path.exists(dst):
                 # già presente (es. messo da computo per custom/complementary) → non sovrascrivere
                 logger.info(f"[style merge] keep existing: {dst}")
                 continue
-    
+
             try:
                 shutil.copy2(src, dst)
                 logger.info(f"[style merge] copied: {src} → {dst}")
             except PermissionError:
                 shutil.copyfile(src, dst)
                 logger.info(f"[style merge] copied (no metadata): {src} → {dst}")
-    
-    # 3) upload style su MinIO
-    if os.path.isdir(style_dir) and os.listdir(style_dir):
-        sync_minio(
-            "upload",
-            style_dir,
-            new_path_output_minio_path,
-            access_key, secret_key, endpoint_url,
-        )
 
 
-    if complementary_names and new_path_output_minio_path:
-
-        sync_minio(
-            "upload",
-            os.path.join(output_local_path, "complementary_poi"),
-            new_path_output_minio_path,
-            access_key, secret_key, endpoint_url,
-        )
-            
     print_end("EXECUTION", t0_computo)
+
+    # ------------------------------------------------
+    # UPLOAD UNICO FINALE SU MINIO
+    # ------------------------------------------------
+    if new_path_output_minio_path:
+        t0_upload = print_start("UPLOAD")
+
+
+        #È una lista Python con i nomi delle sotto-cartelle che voglio caricare su MinIO.
+        #L'ordine è quello logico del flusso:
+        #
+        #grid → prodotto da create_bbox
+        #osm_network, osm_poi, custom_poi, complementary_poi → prodotti da download
+        #output → prodotto da computo
+        #style → assemblato dopo computo (SLD custom/complementary + OSM di default)
+      
+        #_staging NON è nella lista, di proposito: è la cartella temporanea dove hai parcheggiato i file scaricati (edges_in.csv, nodes_in.csv, ecc.). Non ha senso rimandarli su MinIO.
+        subs_to_upload = [
+            "grid",
+            "osm_network",
+            "osm_poi",
+            "custom_poi",
+            "complementary_poi",
+            "output",
+            "style",
+        ]
+
+        for sub in subs_to_upload:
+            local_sub = os.path.join(output_local_path, sub)
+            if os.path.isdir(local_sub) and os.listdir(local_sub):
+                sync_minio(
+                    "upload",
+                    local_sub,
+                    new_path_output_minio_path,
+                    access_key, secret_key, endpoint_url,
+                )
+            else:
+                logger.info(f"[upload] skip empty/missing: {local_sub}")
+
+        print_end("UPLOAD", t0_upload)
 
     shutil.rmtree(stage_dir, ignore_errors=True)
 
