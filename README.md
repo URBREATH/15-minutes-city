@@ -100,6 +100,8 @@ If virtual_nodes = true, a node is added at each hexagon centroid and connected 
 If poi_category_extended_name and its associated fields (poi_category_extended_csv, poi_category_extended_style) are set, an additional output named filename_extended will be produced, containing the results computed only on the specified extended categories, without the overall results.
 extended categories are excluded from the combined computation with the other categories (OSM + custom) and from the overall indexes computation.
 
+---  
+
 ## API execution
 
 The tool is exposed via a REST API accepting JSON payloads.
