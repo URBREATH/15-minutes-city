@@ -45,13 +45,13 @@ MINIO_SECRET_KEY   – Secret key associated with the access key
 MINIO_ENDPOINT_URL – URL of the MinIO endpoint
 ```
 
-### CLI execution
+## CLI execution
 
 ```
 main_15min.py parameters.ini
 ```
 
-## Parameters CLI
+### Parameters CLI
 The CLI version of the script reads a `.ini` configuration file:
 
 ```.ini
@@ -100,7 +100,7 @@ If virtual_nodes = true, a node is added at each hexagon centroid and connected 
 If poi_category_extended_name and its associated fields (poi_category_extended_csv, poi_category_extended_style) are set, an additional output named filename_extended will be produced, containing the results computed only on the specified extended categories, without the overall results.
 extended categories are excluded from the combined computation with the other categories (OSM + custom) and from the overall indexes computation.
 
-### API execution
+## API execution
 
 The tool is exposed via a REST API accepting JSON payloads.
 
@@ -110,7 +110,7 @@ The tool is exposed via a REST API accepting JSON payloads.
 curl -X POST [endpoint] -H "Content-Type: application/json" -d @parameters.json
 ```
 ---  
-## JSON payload
+### JSON payload
 
 The API version required a ```parameters.json``` file:
 
