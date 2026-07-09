@@ -51,7 +51,6 @@ MINIO_ENDPOINT_URL – URL of the MinIO endpoint
 main_15min.py parameters.ini
 ```
 
----  
 ## Parameters CLI
 The CLI version of the script reads a `.ini` configuration file:
 
@@ -110,7 +109,7 @@ The tool is exposed via a REST API accepting JSON payloads.
 ```
 curl -X POST [endpoint] -H "Content-Type: application/json" -d @parameters.json
 ```
-
+---  
 ## JSON payload
 
 The API version required a ```parameters.json``` file:
