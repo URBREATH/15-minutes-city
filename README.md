@@ -6,6 +6,7 @@
 ## Description
 The **15-Minute City tool** is designed to assign a proximity index to urban services within a defined geographic area. It evaluates how easily residents can access Points of Interest (PoIs) on foot or by bicycle, following the “15-minute city” concept introduced by **Carlos Moreno**.  
 This urban planning model envisions that most daily needs should be met within a 15-minute walk or bike ride from home.
+
 This is the open-source version of the tool, but there is also a proprietary version that includes orographic integration and tiling.
 
 ---
@@ -32,7 +33,6 @@ This is the open-source version of the tool, but there is also a proprietary ver
 | `shop`           | Shops                     |
 | `transport`      | Public transport stops    |
 
-
 ---
 
 ## Execution
@@ -50,7 +50,6 @@ MINIO_ENDPOINT_URL – URL of the MinIO endpoint
 ```
 main_15min.py parameters.ini
 ```
----
 
 ---  
 ## Parameters CLI
