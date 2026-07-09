@@ -6,13 +6,18 @@
 ## Description
 The **15-Minute City tool** is designed to assign a proximity index to urban services within a defined geographic area. It evaluates how easily residents can access Points of Interest (PoIs) on foot or by bicycle, following the “15-minute city” concept introduced by **Carlos Moreno**.  
 This urban planning model envisions that most daily needs should be met within a 15-minute walk or bike ride from home.
+This is the open-source version of the tool, but there is also a proprietary version that includes orographic integration and tiling.
 
 ---
 
 ## Key Features
 
 - The tool uses **OpenStreetMap (OSM)** for the road network, while **POIs** can come from either **OSM** or **custom data** sources.
-- The tool calculates walking or biking time to **POIs**.
+- It calculates walking or biking time to **POIs**.
+- The road network is retrieved using the **Pandana library**, with data sourced via the Overpass API.
+- The tool uses the **Pandana library** to find the nearest POI for each location.
+- It divides the area of interest into hexagons (default diameter: 250 m), created only where OSM road nodes are present. The script saves the hexagonal grid as grid.gpkg in the working directory, with the option to use an external grid via the grid_gpkg parameter. Grid parameters, such as area extent and hexagon radius, are stored in grid_parameters.csv.
+- The output is a hexagon vector layer (clipped if a clipping polygon is provided) available in CSV and GPKG formats and EPSG:3857 by default. Both formats include walking times for each service category, the average walking time (mean walking time across categories), and the overall_max index (maximum walking time among categories).
 - **OSM POIs** are defined in the `poi_category_osm_tag.json` file, which contains the preconfigured POI categories. Each key in the JSON represents a category and maps to OSM tags and their possible values, which can be modified or extended. New categories can be added. Below are the 9 preconfigured categories:
 
 | poi_category_osm | description               |
@@ -27,17 +32,10 @@ This urban planning model envisions that most daily needs should be met within a
 | `shop`           | Shops                     |
 | `transport`      | Public transport stops    |
 
--  The road network is retrieved using the **Pandana library**, with data sourced via the Overpass API.
--  The tool uses the **Pandana library** to find the nearest POI for each location.
--  The tool divides the area of interest into hexagons (default diameter: 250 m), created only where OSM road nodes are present.
--  The tool outputs a GPKG file in EPSG:3857 by default.
+
 ---
 
 ## Execution
-
-**Programming Language:** Python
-
-**Libraries:** Pandana
 
 (Optional) Set variables only if publishing to MinIO:
 
@@ -47,30 +45,12 @@ MINIO_SECRET_KEY   – Secret key associated with the access key
 MINIO_ENDPOINT_URL – URL of the MinIO endpoint
 ```
 
-### Local 
+### CLI execution
 
-Run:
 ```
 main_15min.py parameters.ini
 ```
 ---
-
-### API
-
-The tool is exposed via a REST API accepting JSON payloads.
-
-- Endpoint: https://15-min-dev.urbreath.tech/execute
-
-- Method: POST
- 
-- Content-Type: application/json
-
-API run:
-```
-curl -X POST [endpoint] -H "Content-Type: application/json" -d @parameters.json
-```
-
-The output is a hexagon vector layer (clipped if a clipping polygon is provided) available in CSV and GPKG formats. Both formats include walking times for each service category, the average walking time (mean walking time across categories), and the overall_max index (maximum walking time among categories).
 
 ---  
 ## Parameters CLI
@@ -98,9 +78,9 @@ poi_osm_path = path to the folder containing previously downloaded POI CSV files
 poi_category_custom_name = comma-separated list, names are lowercased and spaces removed
 poi_category_custom_csv = full CSV paths (comma-separated) with required columns: id, lat, lon in EPSG:4326.
 poi_category_custom_style = path to the custom sld for geoserver publication (comma-separated)
-poi_category_complementary_name = comma-separated list, names are lowercased and spaces removed
-poi_category_complementary_csv = full CSV paths (comma-separated) with required columns: id, lat, lon in EPSG:4326.
-poi_category_complementary_style = path to the custom sld for geoserver publication (comma-separated)
+poi_category_extended_name = comma-separated list, names are lowercased and spaces removed
+poi_category_extended_csv = full CSV paths (comma-separated) with required columns: id, lat, lon in EPSG:4326.
+poi_category_extended_style = path to the custom sld for geoserver publication (comma-separated)
 [park]
 park_gates_source = osm | csv | road_intersect | virtual (default = osm)
 park_gates_osm_buffer_m =  OSM park-gate buffer distance in meters (default 10.0)
@@ -117,15 +97,20 @@ virtual_nodes = true/false
 
 A separate `parameters_<city>.ini` file is created for each city that requires computation, stored in the parameters folder.
 
-The script generates a hexagonal grid and saves it as grid.gpkg in the working directory, with the option to use an external grid via the grid_gpkg parameter.
-
-Grid parameters, such as area extent and hexagon radius, are stored in grid_parameters.csv.
-
 If virtual_nodes = true, a node is added at each hexagon centroid and connected to the nearest OSM street node, ensuring full network coverage.
 
-If poi_category_complementary_name and its associated fields (poi_category_complementary_csv, poi_category_complementary_style) are set, an additional output named filename_complementary will be produced, containing the results computed only on the specified complementary categories, without the overall results.
-Complementary categories are excluded from the combined computation with the other categories (OSM + custom) and from the overall indexes computation.
+If poi_category_extended_name and its associated fields (poi_category_extended_csv, poi_category_extended_style) are set, an additional output named filename_extended will be produced, containing the results computed only on the specified extended categories, without the overall results.
+extended categories are excluded from the combined computation with the other categories (OSM + custom) and from the overall indexes computation.
 
+### API execution
+
+The tool is exposed via a REST API accepting JSON payloads.
+
+- Endpoint: https://15-min-dev.urbreath.tech/execute
+
+```
+curl -X POST [endpoint] -H "Content-Type: application/json" -d @parameters.json
+```
 
 ## JSON payload
 
@@ -156,9 +141,9 @@ The API version required a ```parameters.json``` file:
     "poi_category_custom_name": null,
     "poi_category_custom_csv": null,
     "poi_category_custom_style": null,
-    "poi_category_complementary_name": null,
-    "poi_category_complementary_csv": null,
-    "poi_category_complementary_style ": null
+    "poi_category_extended_name": null,
+    "poi_category_extended_csv": null,
+    "poi_category_extended_style ": null
 
   },
   "park": {
@@ -184,7 +169,7 @@ All POIs categories are points; parks are polygons, but are represented using pa
 
 Each park is assigned access points, classified into three types depending on the **park_gates_source** parameter:
 
-- **osm** - Gates from OSM located within 10 m of the park boundary (park_gates_osm_buffer_m). When downloaded from OSM, gates are identified using the tags in `park_gate_osm_tag.json`
+- **osm** - Gates from OSM located within the meter, indicated with the parameter park_gates_osm_buffer_m, of the park boundary. When downloaded from OSM, gates are identified using the tags in `park_gate_osm_tag.json`
 
 - **road_network** – Gates generated as intersections between the park perimeter and the street network, considering OSM street tagged in `park_road_network_osm_tag.json`
 
@@ -194,14 +179,8 @@ Each park is assigned access points, classified into three types depending on th
 
 ##  Errors
 
-In the logs, each error is prefixed with a timestamp, e.g.:
-
-```
-[timestamp] ERROR_CODE ERROR_MESSAGE
-```
 | Error Code | Error Message |
 |------------|---------------|
-| **Generic / Execution** | |
 | `ERR_001`  | parameters.ini not found or invalid: `<parameters.ini>` |
 | `ERR_002`  | Missing required parameter: `oi_bbox \| filename \| outputPath` |
 | `ERR_003`  | output_local_path invalid |
@@ -211,33 +190,26 @@ In the logs, each error is prefixed with a timestamp, e.g.:
 | `ERR_007`  | Invalid parameter value `output_format` |
 | `ERR_008`  | Invalid parameter value `output_EPSG` |
 | `ERR_009`  | GeoJSON output must use EPSG:4326 |
-| **Network** | |
 | `ERR_010`  | Invalid parameter value `network_nodes` |
 | `ERR_011`  | Invalid parameter value `network_edges` |
 | `ERR_012`  | `network_nodes` and `network_edges` must be specified together |
-| **POI OSM** | |
 | `ERR_013`  | Invalid parameter value poi_category_osm: `park \| restaurantcafe \| …` |
 | `ERR_014`  | Invalid parameter value `poi_osm_path` |
-| **POI custom** | |
 | `ERR_015`  | Invalid parameter value poi_category_custom_name: `Custom category cannot match OSM category` |
 | `ERR_016`  | Invalid parameter value poi_category_custom: `Custom categories count must match CSV categories count` |
 | `ERR_017`  | poi_category_custom_csv not found `<poi_category_custom_csv>` |
 | `ERR_018`  | poi_category_custom_style requires at least one csv |
 | `ERR_019`  | poi_category_custom_style: more styles than csv categories |
 | `ERR_020`  | poi_category_custom_style not found |
-| **POI complementary** | |
-| `ERR_021`  | Invalid parameter value poi_category_complementary: `Complementary categories count must match CSV categories count` |
-| `ERR_022`  | poi_category_complementary_csv not found `<poi_category_complementary_csv>` |
-| `ERR_023`  | poi_category_complementary_style requires at least one csv |
-| `ERR_024`  | poi_category_complementary_style: more styles than csv categories |
-| `ERR_025`  | poi_category_complementary_style not found |
-| **Park** | |
+| `ERR_021`  | Invalid parameter value poi_category_extended: `extended categories count must match CSV categories count` |
+| `ERR_022`  | poi_category_extended_csv not found `<poi_category_extended_csv>` |
+| `ERR_023`  | poi_category_extended_style requires at least one csv |
+| `ERR_024`  | poi_category_extended_style: more styles than csv categories |
+| `ERR_025`  | poi_category_extended_style not found |
 | `ERR_026`  | Invalid parameter value park_gates_source: `osm \| csv \| road_network \| virtual` |
 | `ERR_027`  | park_gates_csv missing or invalid |
-| **Grid** | |
 | `ERR_028`  | clip_layer not found `<clip_layer>` |
 | `ERR_029`  | grid_gpkg not found `<grid_gpkg>` |
-
 
 ---
 
@@ -264,7 +236,7 @@ Output directory is created at output_local_path. Inside it:
 
 - **custom_pois**: contains CSV files for custom categories.
 
-- **complementary_pois**: contains CSV files for complementary categories.
+- **extended_pois**: contains CSV files for extended categories.
 
 - **osm_network**: contains: nodes.csv and edges.csv
 
@@ -272,7 +244,7 @@ Output directory is created at output_local_path. Inside it:
 output_local_path/
 ├── output/
 │   ├── <filename>.{format}
-│   ├── <filename>_complementary.{format}
+│   ├── <filename>_extended.{format}
 ├── _publish.json 
 ├── grid/
 │   ├── grid_parameter.csv
@@ -287,7 +259,7 @@ output_local_path/
 │   ├── entertainment.csv
 │   ├── shop.csv
 ├── costum_pois/
-├── complementary_pois/
+├── extended_pois/
 │   ├── _publish.json                           
 └── osm_network/                                   
     ├── edges.csv
