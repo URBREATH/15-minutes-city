@@ -208,8 +208,8 @@ def download(
     poi_category_custom_name,
     poi_category_custom_csv,    
     poi_category_osm,
-    poi_category_complementary_name,
-    poi_category_complementary_csv,    
+    poi_category_extended_name,
+    poi_category_extended_csv,    
     network_edges,              # path locale o None
     network_nodes,              # path locale o None
     poi_osm_path,               # path locale o None
@@ -229,8 +229,8 @@ def download(
     download_poi_osm(
         aoi_bbox, output_path_bbox,
         poi_category_osm, poi_osm_path,
-        poi_category_custom_name, poi_category_custom_csv,poi_category_complementary_name,
-        poi_category_complementary_csv, 
+        poi_category_custom_name, poi_category_custom_csv,poi_category_extended_name,
+        poi_category_extended_csv, 
         park_gates_source, park_gates_osm_buffer_m,
         park_gates_csv, park_gates_virtual_distance_m,
     )
@@ -245,8 +245,8 @@ def download_poi_osm(
     poi_osm_path,           
     custom_names,
     custom_csvs,         
-    complementary_names,
-    complementary_csvs,
+    extended_names,
+    extended_csvs,
     park_gates_source='osm',
     park_gates_osm_buffer_m=10,
     park_gates_csv=None,    # path locale o None
@@ -269,10 +269,10 @@ def download_poi_osm(
 
     poi_folder = os.path.join(output_path_bbox, "osm_poi")
     custom_poi_folder = os.path.join(output_path_bbox, "custom_poi")
-    complementary_poi_folder = os.path.join(output_path_bbox, "complementary_poi")  
+    extended_poi_folder = os.path.join(output_path_bbox, "extended_poi")  
     os.makedirs(poi_folder, exist_ok=True)
     os.makedirs(custom_poi_folder, exist_ok=True)
-    os.makedirs(complementary_poi_folder, exist_ok=True)  
+    os.makedirs(extended_poi_folder, exist_ok=True)  
 
     with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
@@ -353,15 +353,15 @@ def download_poi_osm(
             df.to_csv(local_csv_path, index=False)
             logger.info(f"Saved custom POI: {local_csv_path}")
 
-    # ---------- COMPLEMENTARY POIs ----------
-    if complementary_names and complementary_csvs:
-        for name, csv_file in zip(complementary_names, complementary_csvs):
-            logger.info(f"Processing complementary POI: {name}")
-            local_csv_path = os.path.join(complementary_poi_folder, f"{name}.csv")
+    # ---------- extended POIs ----------
+    if extended_names and extended_csvs:
+        for name, csv_file in zip(extended_names, extended_csvs):
+            logger.info(f"Processing extended POI: {name}")
+            local_csv_path = os.path.join(extended_poi_folder, f"{name}.csv")
             df = pd.read_csv(csv_file)
             logger.info(f"Rows: {len(df)}")
             df.to_csv(local_csv_path, index=False)
-            logger.info(f"Saved complementary POI: {local_csv_path}")
+            logger.info(f"Saved extended POI: {local_csv_path}")
 
     logger.info("-" * 120)
     logger.info("DOWNLOAD POIs end.")
@@ -924,9 +924,9 @@ def walkScore_min(output_path_bbox, poi_category_osm,
 
     poi_folder = os.path.join(output_path_bbox, "osm_poi")
     poi_folder_custom = os.path.join(output_path_bbox, "custom_poi")
-    complementary_poi_folder = os.path.join(output_path_bbox, "complementary_poi")
+    extended_poi_folder = os.path.join(output_path_bbox, "extended_poi")
     csv_files = []
-    for folder in [poi_folder, poi_folder_custom, complementary_poi_folder]:
+    for folder in [poi_folder, poi_folder_custom, extended_poi_folder]:
         if os.path.isdir(folder):
             csv_files.extend(glob.glob(os.path.join(folder, "*.csv")))
 
@@ -998,7 +998,7 @@ def walkScore_min(output_path_bbox, poi_category_osm,
 
 def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
             custom_names, custom_csvs, grid_gpkg, poi_category_osm, clip_layer,
-            filename, complementary_names, complementary_csvs,poi_category_custom_style,poi_category_complementary_style,
+            filename, extended_names, extended_csvs,poi_category_custom_style,poi_category_extended_style,
             output_minio_path,             
             virtual_nodes, output_format, output_EPSG,
             bike_speed_kmh, walk_speed_kmh, mode='walk', weight='time'):
@@ -1177,17 +1177,17 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
         pois, categories = [], []
         poi_folder = os.path.join(output_path_bbox, "osm_poi")
         custom_poi_folder = os.path.join(output_path_bbox, "custom_poi")
-        complementary_poi_folder = os.path.join(output_path_bbox, "complementary_poi")
+        extended_poi_folder = os.path.join(output_path_bbox, "extended_poi")
         
-        complementary_categories = set()   # NEW: tiene traccia delle complementary
+        extended_categories = set()   # NEW: tiene traccia delle extended
         
         csv_files = []
-        for folder in [poi_folder, custom_poi_folder, complementary_poi_folder]:
+        for folder in [poi_folder, custom_poi_folder, extended_poi_folder]:
             if os.path.isdir(folder):
                 for f in glob.glob(os.path.join(folder, "*.csv")):
                     csv_files.append(f)
-                    if folder == complementary_poi_folder:           # NEW
-                        complementary_categories.add(               # NEW
+                    if folder == extended_poi_folder:           # NEW
+                        extended_categories.add(               # NEW
                             os.path.splitext(os.path.basename(f))[0]
                         )
         
@@ -1195,12 +1195,12 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
             categories.append(os.path.splitext(os.path.basename(f))[0])
             pois.append(pd.read_csv(f))
         
-        # NEW: categorie usate per gli overall (escludono le complementary)
-        main_categories = [c for c in categories if c not in complementary_categories]
+        # NEW: categorie usate per gli overall (escludono le extended)
+        main_categories = [c for c in categories if c not in extended_categories]
         
         logger.info("POIs categories: %s", categories)
         logger.info("Main categories (for overall): %s", main_categories)
-        logger.info("Complementary categories: %s", complementary_categories)
+        logger.info("extended categories: %s", extended_categories)
     
         # -------- VIRTUAL NODES --------
         if virtual_nodes:
@@ -1253,7 +1253,7 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
         
         hexag['countNaN'] = hexag[main_minutes_cols].isnull().sum(axis=1)
         
-        # Manteniamo TUTTE le colonne minutes_* (anche complementary) per visualizzarle
+        # Manteniamo TUTTE le colonne minutes_* (anche extended) per visualizzarle
         hexag = hexag[
             ['geometry']
             + [f'minutes_{cat}' for cat in categories]
@@ -1336,7 +1336,7 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
                 if c in hexag.columns:
                     main_cols.append(c)
         
-        complementary_cols = ['geometry'] + [c for c in complementary_categories if c in hexag.columns]
+        extended_cols = ['geometry'] + [c for c in extended_categories if c in hexag.columns]
         
         # ---------- CLIP (una volta sola, poi si splitta) ----------
         if clip_layer and os.path.isfile(clip_layer):
@@ -1352,9 +1352,9 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
         hexag_main = hexag_clipped[[c for c in main_cols if c in hexag_clipped.columns]].copy()
         hexag_main = hexag_main.to_crs(f"EPSG:{output_EPSG}")
         
-        has_complementary = bool(complementary_categories) and len(complementary_cols) > 1
-        if has_complementary:
-            hexag_compl = hexag_clipped[[c for c in complementary_cols if c in hexag_clipped.columns]].copy()
+        has_extended = bool(extended_categories) and len(extended_cols) > 1
+        if has_extended:
+            hexag_compl = hexag_clipped[[c for c in extended_cols if c in hexag_clipped.columns]].copy()
             hexag_compl = hexag_compl.to_crs(f"EPSG:{output_EPSG}")
         
         # ---------- SALVATAGGIO ----------
@@ -1367,8 +1367,8 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
                 gdf.to_csv(f"{output_dir}/{name}.csv", sep=';', index=False)
         
         _save(hexag_main, filename)
-        if has_complementary:
-            _save(hexag_compl, f"{filename}_complementary")
+        if has_extended:
+            _save(hexag_compl, f"{filename}_extended")
         
         # ---------- _publish.json (MAIN: osm + custom + overall) ----------
         if output_minio_path:
@@ -1379,7 +1379,7 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
             os.makedirs(style_dir, exist_ok=True)
         
             publish_main  = {"analysis": "15 minutes city index", "data": []}
-            publish_compl = {"analysis": "15 minutes city index - complementary", "data": []}
+            publish_compl = {"analysis": "15 minutes city index - extended", "data": []}
         
             # ---- categorie OSM (= main_categories MENO le custom) ----
             osm_categories = [c for c in main_categories if c not in (custom_names or [])]
@@ -1430,7 +1430,7 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
                         shutil.copyfile(sld_path, dest_sld)
                         logger.info(f"[{kind}] style copied (no metadata): {dest_sld}")
         
-                    ws_prefix = f"{filename}_complementary" if kind == "complementary" else filename
+                    ws_prefix = f"{filename}_extended" if kind == "extended" else filename
                     target_publish["data"].append({
                         "workspace": f"{ws_prefix}_{cat_name}",
                         "store_name": f"{ws_prefix}_{cat_name}",
@@ -1450,14 +1450,14 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
                 data_filename=filename,
             )
         
-            # ---- COMPLEMENTARY → publish COMPLEMENTARY ----
-            if has_complementary:
+            # ---- extended → publish extended ----
+            if has_extended:
                 _publish_styles(
-                    complementary_names,
-                    poi_category_complementary_style,
-                    kind="complementary",
+                    extended_names,
+                    poi_category_extended_style,
+                    kind="extended",
                     target_publish=publish_compl,
-                    data_filename=f"{filename}_complementary",
+                    data_filename=f"{filename}_extended",
                 )
         
             # ---- scrittura JSON in output/ ----
@@ -1465,8 +1465,8 @@ def computo(aoi_bbox, latitude, longitude, hex_radius_m, output_path_bbox,
             with open(os.path.join(output_dir, "_publish.json"), "w", encoding="utf-8") as f:
                 json.dump(publish_main, f, indent=2)
         
-            if has_complementary:
-                with open(os.path.join(f"{output_path_bbox}/complementary_poi", "_publish.json"), "w", encoding="utf-8") as f:
+            if has_extended:
+                with open(os.path.join(f"{output_path_bbox}/extended_poi", "_publish.json"), "w", encoding="utf-8") as f:
                     json.dump(publish_compl, f, indent=2)
         
         return 0
