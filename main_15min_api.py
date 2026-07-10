@@ -32,9 +32,9 @@ class POI(BaseModel):
     poi_category_custom_name: Optional[str] = None
     poi_category_custom_csv: Optional[str] = None
     poi_category_custom_style: Optional[str] = None
-    poi_category_complementary_name: Optional[str] = None
-    poi_category_complementary_csv: Optional[str] = None
-    poi_category_complementary_style: Optional[str] = None
+    poi_category_extended_name: Optional[str] = None
+    poi_category_extended_csv: Optional[str] = None
+    poi_category_extended_style: Optional[str] = None
 
 class Park(BaseModel):
     park_gates_source: Optional[str] = None
