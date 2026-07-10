@@ -104,12 +104,12 @@ def run_analysis(params: dict):
     poi_category_osm = poi.get('poi_category_osm') or (default_poi_category_custom_name if not poi.get('poi_category_custom_name') else None)
 
 
-    poi_category_complementary_name = poi.get('poi_category_complementary_name')
-    poi_category_complementary_csv =poi.get('poi_category_complementary_csv')
-    poi_category_complementary_style =poi.get('poi_category_complementary_style')
+    poi_category_extended_name = poi.get('poi_category_extended_name')
+    poi_category_extended_csv =poi.get('poi_category_extended_csv')
+    poi_category_extended_style =poi.get('poi_category_extended_style')
 
-    complementary_names = ["".join(x.lower().split()) for x in poi_category_complementary_name.split(",")] if poi_category_complementary_name else []
-    complementary_csvs = [x.strip() for x in poi_category_complementary_csv.split(",")] if poi_category_complementary_csv else []
+    extended_names = ["".join(x.lower().split()) for x in poi_category_extended_name.split(",")] if poi_category_extended_name else []
+    extended_csvs = [x.strip() for x in poi_category_extended_csv.split(",")] if poi_category_extended_csv else []
     
     bbox = aoi['bbox']
 
@@ -163,9 +163,9 @@ def run_analysis(params: dict):
         "custom_names": custom_names,
         "custom_csvs": custom_csvs,
         "custom_styles": poi_category_custom_style,
-        "complementary_names":complementary_names,
-        "complementary_csvs": complementary_csvs,
-        "complementary_styles": poi_category_complementary_style,
+        "extended_names":extended_names,
+        "extended_csvs": extended_csvs,
+        "extended_styles": poi_category_extended_style,
     
         "park_gates_source": park_gates_source,
         "park_gates_osm_buffer_m": park_gates_osm_buffer_m,
@@ -190,7 +190,7 @@ def run_analysis(params: dict):
     # ------------------------------------------------
     
     
-    for sub in ["grid", "osm_network", "osm_poi", "custom_poi", "complementary_poi" ,"output", "style"]:
+    for sub in ["grid", "osm_network", "osm_poi", "custom_poi", "extended_poi" ,"output", "style"]:
         shutil.rmtree(os.path.join(output_local_path, sub), ignore_errors=True)
 
     
@@ -257,16 +257,16 @@ def run_analysis(params: dict):
         else:
             custom_csvs_local.append(p)
     
-    # --- COMPLEMENTARY CSVs ---
-    complementary_csvs_local = []
-    for i, p in enumerate(complementary_csvs or []):
+    # --- extended CSVs ---
+    extended_csvs_local = []
+    for i, p in enumerate(extended_csvs or []):
         if p and is_minio_path(p):
-            local_p = os.path.join(stage_dir, f"complementary_{i}.csv")
+            local_p = os.path.join(stage_dir, f"extended_{i}.csv")
             sync_minio("download", local_p, p,
                        access_key, secret_key, endpoint_url)
-            complementary_csvs_local.append(local_p)
+            extended_csvs_local.append(local_p)
         else:
-            complementary_csvs_local.append(p)
+            extended_csvs_local.append(p)
     
     # 3. CORE: download senza parametri MinIO
     download(
@@ -275,8 +275,8 @@ def run_analysis(params: dict):
         custom_names,
         custom_csvs_local,
         poi_category_osm,
-        complementary_names,
-        complementary_csvs_local,         
+        extended_names,
+        extended_csvs_local,         
         network_edges_local,
         network_nodes_local,
         poi_osm_path_local,
@@ -320,10 +320,10 @@ def run_analysis(params: dict):
         poi_category_osm,
         clip_layer_local,
         filename,
-        complementary_names,
-        complementary_csvs_local,
+        extended_names,
+        extended_csvs_local,
         poi_category_custom_style,
-        poi_category_complementary_style,
+        poi_category_extended_style,
         new_path_output_minio_path,
         virtual_nodes,
         output_format,
@@ -368,7 +368,7 @@ def run_analysis(params: dict):
 
             dst = os.path.join(style_dir, fname)
             if os.path.exists(dst):
-                # già presente (es. messo da computo per custom/complementary) → non sovrascrivere
+                # già presente (es. messo da computo per custom/extended) → non sovrascrivere
                 logger.info(f"[style merge] keep existing: {dst}")
                 continue
 
@@ -393,9 +393,9 @@ def run_analysis(params: dict):
         #L'ordine è quello logico del flusso:
         #
         #grid → prodotto da create_bbox
-        #osm_network, osm_poi, custom_poi, complementary_poi → prodotti da download
+        #osm_network, osm_poi, custom_poi, extended_poi → prodotti da download
         #output → prodotto da computo
-        #style → assemblato dopo computo (SLD custom/complementary + OSM di default)
+        #style → assemblato dopo computo (SLD custom/extended + OSM di default)
       
         #_staging NON è nella lista, di proposito: è la cartella temporanea dove hai parcheggiato i file scaricati (edges_in.csv, nodes_in.csv, ecc.). Non ha senso rimandarli su MinIO.
         subs_to_upload = [
@@ -403,7 +403,7 @@ def run_analysis(params: dict):
             "osm_network",
             "osm_poi",
             "custom_poi",
-            "complementary_poi",
+            "extended_poi",
             "output",
             "style",
         ]
