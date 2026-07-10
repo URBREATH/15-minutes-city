@@ -39,12 +39,12 @@ ERRORS = {
     "ERR_019": "poi_category_custom_style: more styles than csv categories",
     "ERR_020": "poi_category_custom_style not found",
 
-    # --- POI complementary ---
-    "ERR_021": "complementary categories count must match CSV categories count",
-    "ERR_022": "poi_category_complementary_csv not found",
-    "ERR_023": "poi_category_complementary_style requires at least one csv",
-    "ERR_024": "poi_category_complementary_style: more styles than csv categories",
-    "ERR_025": "poi_category_complementary_style not found",
+    # --- POI extended ---
+    "ERR_021": "extended categories count must match CSV categories count",
+    "ERR_022": "poi_category_extended_csv not found",
+    "ERR_023": "poi_category_extended_style requires at least one csv",
+    "ERR_024": "poi_category_extended_style: more styles than csv categories",
+    "ERR_025": "poi_category_extended_style not found",
 
     # --- Park ---
     "ERR_026": "Invalid parameter value park_gates_source",
