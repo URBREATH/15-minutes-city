@@ -23,9 +23,9 @@
     "poi_category_custom_name": null,
     "poi_category_custom_csv": null,
     "poi_category_custom_style": null,
-    "poi_category_complementary_name": null,
-    "poi_category_complementary_csv": null,
-    "poi_category_complementary_style ": null
+    "poi_category_extended_name": null,
+    "poi_category_extended_csv": null,
+    "poi_category_extended_style ": null
 
   },
   "park": {
