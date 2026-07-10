@@ -111,9 +111,9 @@ def validate_api_params(params: dict):
     poi_category_custom_csv = poi.get("poi_category_custom_csv")
     poi_category_custom_style = poi.get("poi_category_custom_style")
 
-    poi_category_complementary_name = poi.get("poi_category_complementary_name")
-    poi_category_complementary_csv = poi.get("poi_category_complementary_csv")
-    poi_category_complementary_style = poi.get("poi_category_complementary_style")
+    poi_category_extended_name = poi.get("poi_category_extended_name")
+    poi_category_extended_csv = poi.get("poi_category_extended_csv")
+    poi_category_extended_style = poi.get("poi_category_extended_style")
 
     with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
@@ -212,33 +212,33 @@ def validate_api_params(params: dict):
                 if not os.path.isfile(s):
                     raise_error("ERR_020", extra=s)
 
-    # Validate complementary POI
-    complementary_names = ["".join(x.lower().split()) for x in poi_category_complementary_name.split(",")] if poi_category_complementary_name else []
-    complementary_csvs = [x.strip() for x in poi_category_complementary_csv.split(",")] if poi_category_complementary_csv else []
-    complementary_styles = [x.strip() for x in poi_category_complementary_style.split(",")] if poi_category_complementary_style else []
+    # Validate extended POI
+    extended_names = ["".join(x.lower().split()) for x in poi_category_extended_name.split(",")] if poi_category_extended_name else []
+    extended_csvs = [x.strip() for x in poi_category_extended_csv.split(",")] if poi_category_extended_csv else []
+    extended_styles = [x.strip() for x in poi_category_extended_style.split(",")] if poi_category_extended_style else []
 
-    if complementary_names or complementary_csvs:
-        if len(complementary_names) != len(complementary_csvs):
+    if extended_names or extended_csvs:
+        if len(extended_names) != len(extended_csvs):
             raise_error("ERR_021")
 
     # CSV existence check
-    if complementary_names or complementary_csvs:
-        for f in complementary_csvs:
+    if extended_names or extended_csvs:
+        for f in extended_csvs:
             if is_minio_path(f):
                 check_path_exists(f, "ERR_022", endpoint_url, access_key, secret_key)
             else:
                 if not os.path.exists(f):
                     raise_error("ERR_022", extra=f)
 
-    # STYLE CONTROLS (complementary)
-    if complementary_styles:
-        if not complementary_csvs:
+    # STYLE CONTROLS (extended)
+    if extended_styles:
+        if not extended_csvs:
             raise_error("ERR_023")
 
-        if len(complementary_styles) > len(complementary_csvs):
+        if len(extended_styles) > len(extended_csvs):
             raise_error("ERR_024")
 
-        for s in complementary_styles:
+        for s in extended_styles:
             if is_minio_path(s):
                 check_path_exists(s, "ERR_025", endpoint_url, access_key, secret_key)
             else:
@@ -424,9 +424,9 @@ def validate_parameters(parameters_file):
     poi_category_custom_csv = poi_parameters.get('poi_category_custom_csv')
     poi_category_custom_style = poi_parameters.get('poi_category_custom_style')
 
-    poi_category_complementary_name = poi_parameters.get('poi_category_complementary_name')
-    poi_category_complementary_csv = poi_parameters.get('poi_category_complementary_csv')
-    poi_category_complementary_style = poi_parameters.get('poi_category_complementary_style')
+    poi_category_extended_name = poi_parameters.get('poi_category_extended_name')
+    poi_category_extended_csv = poi_parameters.get('poi_category_extended_csv')
+    poi_category_extended_style = poi_parameters.get('poi_category_extended_style')
 
     with open("./config/poi_category_osm_tag.json", "r", encoding="utf-8") as f:
         osm_tags = json.load(f)
@@ -527,33 +527,33 @@ def validate_parameters(parameters_file):
                 if not os.path.isfile(s):
                     raise_error("ERR_020", extra=s)
 
-    # Validate complementary POI
-    complementary_names = ["".join(x.lower().split()) for x in poi_category_complementary_name.split(",")] if poi_category_complementary_name else []
-    complementary_csvs = [x.strip() for x in poi_category_complementary_csv.split(",")] if poi_category_complementary_csv else []
-    complementary_styles = [x.strip() for x in poi_category_complementary_style.split(",")] if poi_category_complementary_style else []
+    # Validate extended POI
+    extended_names = ["".join(x.lower().split()) for x in poi_category_extended_name.split(",")] if poi_category_extended_name else []
+    extended_csvs = [x.strip() for x in poi_category_extended_csv.split(",")] if poi_category_extended_csv else []
+    extended_styles = [x.strip() for x in poi_category_extended_style.split(",")] if poi_category_extended_style else []
 
-    if complementary_names or complementary_csvs:
-        if len(complementary_names) != len(complementary_csvs):
+    if extended_names or extended_csvs:
+        if len(extended_names) != len(extended_csvs):
             raise_error("ERR_021")
 
-    # CSV existence check (complementary)
-    if complementary_names or complementary_csvs:
-        for f in complementary_csvs:
+    # CSV existence check (extended)
+    if extended_names or extended_csvs:
+        for f in extended_csvs:
             if is_minio_path(f):
                 check_path_exists(f, "ERR_022", endpoint_url, access_key, secret_key)
             else:
                 if not os.path.exists(f):
                     raise_error("ERR_022", extra=f)
 
-    # STYLE CONTROLS (complementary)
-    if complementary_styles:
-        if not complementary_csvs:
+    # STYLE CONTROLS (extended)
+    if extended_styles:
+        if not extended_csvs:
             raise_error("ERR_023")
 
-        if len(complementary_styles) > len(complementary_csvs):
+        if len(extended_styles) > len(extended_csvs):
             raise_error("ERR_024")
 
-        for s in complementary_styles:
+        for s in extended_styles:
             if is_minio_path(s):
                 check_path_exists(s, "ERR_025", endpoint_url, access_key, secret_key)
             else:
