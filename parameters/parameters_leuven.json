@@ -27,7 +27,11 @@
     "poi_osm_path": "urbreath-public-repo/Leuven/15minute_city_index/20260514T120436_Leuven/osm_poi",
     "poi_category_custom_name": null,
     "poi_category_custom_csv": null,
-    "poi_category_custom_style": null
+    "poi_category_custom_style": null,
+    "poi_category_extended_name": null,
+    "poi_category_extended_csv": null,
+    "poi_category_extended_style ": null
+
   },
   "park": {
     "park_gates_source": "",
