@@ -260,7 +260,7 @@ def download_poi_osm(
             return set()
         if (not poi_category_osm) or (poi_category_osm.lower().strip() == "all"):
             return set(valid_categories)
-        return {x.strip().lower() for x in poi_category_osm.split(";") if x.strip()}
+        return {x.strip().lower() for x in poi_category_osm.split(",") if x.strip()}
 
     def list_local_categories(folder):
         if not folder or not os.path.exists(folder):
