@@ -66,7 +66,7 @@ mode = walk | bike
 walk_speed_kmh =  walking speed (default = 5.0 Km/h)  
 bike_speed_kmh = biking speed (default = 15.0 Km/h)
 output_format = csv | gpkg | geojson
-output_EPSG = output CRS EPSG code (metric; default: 3857)
+output_epsg = output CRS EPSG code (metric; default: 3857)
 [network]
 network_edges = full path to a csv file with u,v,length,time columns
 network_nodes =	full path to a csv file with y,x,type columns in EPSG:4326
@@ -130,7 +130,7 @@ The API version required a ```parameters.json``` file:
     "walk_speed_kmh": 5.0,
     "bike_speed_kmh": 15.0,
     "output_format": null,
-    "output_EPSG": null
+    "output_epsg": null
   },
   "network": {
     "network_edges": "",
